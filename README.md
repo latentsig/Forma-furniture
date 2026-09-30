@@ -27,17 +27,18 @@ The site is also currently running at <http://127.0.0.1:8002/>.
 - `craft.html` — materials and making story
 - `journal.html` — editorial article
 - `visit.html` — showroom details and project enquiry form
-- `styles.css` and `pages.css` — responsive layouts, visual styling, and motion preferences
-- `script.js` and `pages.js` — homepage shopping bag, catalogue filters, product details, mobile navigation, and demo confirmations
+- `styles.css`, `pages.css`, and `cart.css` — responsive layouts, visual styling, and the collection bag panel
+- `script.js` and `pages.js` — catalogue filters, product details, mobile navigation, shopping bag, and demo confirmations
 - `image assets/` — supplied furniture photography plus original Forma editorial and product images. Generated product photos include the cane lounge chair, oak pedestal table, fluted sideboard, rust loveseat, walnut coffee table, boucle ottoman, walnut bookcase, and cane bedroom bench.
 
 ## Interactions
 
 - Filter the collection by seating, tables, bedroom, or storage.
-- Select a product photo for its detail page, or use Quick Add to add it to the homepage shopping bag.
+- Select a product photo or **Explore** link on Collections to open its detail page.
+- On Collections, use **Add to Cart** or **Explore** for product details. The bag supports quantity changes and a demo checkout that ends with an order confirmation; no payment is taken and no order is sent.
 - Product pages show the material, dimensions, finish, availability, and an enquiry action.
 - Continue to checkout, enter sample delivery details, and see an on-page confirmation. No email is sent and no payment is processed.
 - Submit an enquiry to open an email draft with the project details.
 - Open the journal story from either journal link.
 
-The shopping request is a front-end demo: it shows a confirmation and clears the bag without sending or storing an order. Enquiries open a prefilled draft in the visitor’s email app. This static site does not process payments or persist submissions.
+Checkout is a front-end demo: it shows an order confirmation and clears the bag without taking payment or sending/storing an order. The demo bag is stored in browser local storage. Enquiries open a prefilled draft in the visitor’s email app. This static site does not process payments or persist submissions.

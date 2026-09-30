@@ -12,6 +12,81 @@ document.querySelectorAll('.filter-row button').forEach(button => button.addEven
   });
 }));
 
+const cartCountNodes = document.querySelectorAll('.cart-count');
+const shoppingDialog = document.querySelector('.shopping-dialog');
+const shoppingItemsNode = document.querySelector('.shopping-items');
+const shoppingTotalNode = document.querySelector('.shopping-subtotal');
+let shoppingBag = [];
+try { shoppingBag = JSON.parse(localStorage.getItem('forma-demo-bag') || '[]'); } catch { shoppingBag = []; }
+const formatPrice = amount => `₹${Number(amount).toLocaleString('en-IN')}`;
+function saveShoppingBag() {
+  try { localStorage.setItem('forma-demo-bag', JSON.stringify(shoppingBag)); } catch { /* demo can still run without storage */ }
+  const count = shoppingBag.reduce((total, item) => total + item.quantity, 0);
+  cartCountNodes.forEach(node => node.textContent = count);
+  shoppingTotalNode?.replaceChildren(document.createTextNode(formatPrice(shoppingBag.reduce((total, item) => total + item.price * item.quantity, 0))));
+  if (!shoppingItemsNode) return;
+  if (!shoppingBag.length) {
+    shoppingItemsNode.innerHTML = '<p class="shopping-empty">Your bag is empty for now.<br>Find a piece you love.</p>';
+    return;
+  }
+  shoppingItemsNode.innerHTML = shoppingBag.map((item, index) => `<div class="shopping-line"><img src="${item.image}" alt=""><div><b>${item.name}</b><small>${formatPrice(item.price)} each</small><div class="shopping-quantity"><button type="button" data-quantity="minus" data-index="${index}" aria-label="Decrease ${item.name} quantity">−</button><span>${item.quantity}</span><button type="button" data-quantity="plus" data-index="${index}" aria-label="Increase ${item.name} quantity">+</button></div></div><span>${formatPrice(item.quantity * item.price)}</span><button type="button" data-remove-item="${index}" aria-label="Remove ${item.name}">×</button></div>`).join('');
+  const checkoutButton = document.querySelector('.proceed-checkout');
+  if (checkoutButton) checkoutButton.disabled = !shoppingBag.length;
+}
+function addShoppingItem(item) {
+  const found = shoppingBag.find(existing => existing.id === item.id);
+  if (found) found.quantity++;
+  else shoppingBag.push({...item, quantity:1});
+  saveShoppingBag();
+}
+saveShoppingBag();
+document.querySelectorAll('.page-product-card').forEach(card => {
+  const productLink = card.querySelector('a[href*="product.html"]');
+  const id = new URL(productLink.href).searchParams.get('id');
+  const name = card.querySelector('h2').textContent;
+  const price = Number(card.querySelector('.page-product-meta span').textContent.replace(/[^0-9]/g, ''));
+  const image = card.querySelector('img').getAttribute('src');
+  const actions = document.createElement('div');
+  actions.className = 'page-product-actions';
+  actions.innerHTML = `<button class="add-to-bag" type="button">Add to Cart <span>＋</span></button><a class="explore-product" href="${productLink.getAttribute('href')}">Explore <span>↗</span></a>`;
+  card.append(actions);
+  actions.querySelector('.add-to-bag').addEventListener('click', event => {
+    addShoppingItem({id, name, price, image});
+    const button = event.currentTarget;
+    button.innerHTML = 'Added <span>✓</span>';
+    shoppingDialog?.showModal();
+    window.setTimeout(() => { if (button.isConnected) button.innerHTML = 'Add to Cart <span>＋</span>'; }, 1300);
+  });
+});
+document.querySelector('.collection-bag')?.addEventListener('click', () => shoppingDialog?.showModal());
+document.querySelector('.shopping-close')?.addEventListener('click', () => shoppingDialog?.close());
+shoppingDialog?.addEventListener('click', event => { if (event.target === shoppingDialog) shoppingDialog.close(); });
+shoppingItemsNode?.addEventListener('click', event => {
+  const remove = event.target.closest('[data-remove-item]');
+  const quantityButton = event.target.closest('[data-quantity]');
+  if (remove) shoppingBag.splice(Number(remove.dataset.removeItem), 1);
+  else if (quantityButton) {
+    const item = shoppingBag[Number(quantityButton.dataset.index)];
+    item.quantity += quantityButton.dataset.quantity === 'plus' ? 1 : -1;
+    if (item.quantity < 1) shoppingBag.splice(Number(quantityButton.dataset.index), 1);
+  } else return;
+  saveShoppingBag();
+});
+document.querySelector('.proceed-checkout')?.addEventListener('click', () => {
+  if (!shoppingBag.length) return;
+  shoppingDialog.close();
+  document.querySelector('.checkout-dialog')?.showModal();
+});
+document.querySelector('.checkout-close')?.addEventListener('click', () => document.querySelector('.checkout-dialog')?.close());
+document.querySelector('.checkout-form')?.addEventListener('submit', event => {
+  event.preventDefault();
+  event.currentTarget.reset();
+  shoppingBag = [];
+  saveShoppingBag();
+  document.querySelector('.checkout-dialog')?.close();
+  document.querySelector('.shopping-confirmation')?.showModal();
+});
+
 const catalog = {
   'sunday-sofa': {name:'The Sunday Sofa', category:'Seating', price:'₹1,48,000', material:'Solid teak · Natural linen', description:'Room to stretch out, settle in, and stay a little longer. Sunday pairs a kiln-dried teak frame with relaxed, removable linen upholstery.', images:['sofa1.webp','sofa2.jpg','sofa3.jpg'], size:'W 220 × D 92 × H 78 cm', lead:'Made to order · 6–8 weeks'},
   'gather-table': {name:'The Gather Table', category:'Tables', price:'₹86,000', material:'Solid oak · Smoked finish', description:'A generous everyday table with softened edges and a calm, sturdy silhouette. Built for long lunches and all the little things in between.', images:['dining1.avif','dining2.jpg','dining3.webp'], size:'W 180 × D 90 × H 76 cm', lead:'Ready in 2–3 weeks'},
@@ -49,8 +124,15 @@ if (productPage) {
     img.src = `image%20assets/${item.images[index]}`;
     img.alt = `${item.name} — view ${index + 1}`;
   });
-  document.querySelector('.detail-action').addEventListener('click', () => {
-    location.href = `visit.html?piece=${encodeURIComponent(item.name)}#enquiry`;
+  const selectedItem = {id, name:item.name, price:Number(item.price.replace(/[^0-9]/g, '')), image:`image%20assets/${item.images[0]}`};
+  document.querySelector('.detail-add-to-bag')?.addEventListener('click', () => {
+    addShoppingItem(selectedItem);
+    shoppingDialog?.showModal();
+  });
+  document.querySelector('.detail-buy-now')?.addEventListener('click', () => {
+    addShoppingItem(selectedItem);
+    const checkoutDialog = document.querySelector('.checkout-dialog');
+    if (checkoutDialog?.showModal) checkoutDialog.showModal();
   });
 }
 
