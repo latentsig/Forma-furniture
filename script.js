@@ -107,9 +107,10 @@ document.querySelector('.confirmation-close').addEventListener('click', () => do
 
 document.querySelector('.enquiry-form').addEventListener('submit', event => {
   event.preventDefault();
-  const data = new FormData(event.currentTarget);
-  const body = [`Name: ${data.get('name')}`, `Email: ${data.get('email')}`, `Interested in: ${data.get('interest')}`, '', `Project details: ${data.get('message') || 'Not provided'}`].join('\n');
-  window.location.href = `mailto:hello@forma.studio?subject=${encodeURIComponent(`Forma enquiry: ${data.get('interest')}`)}&body=${encodeURIComponent(body)}`;
-  document.querySelector('.form-message').textContent = 'Your email app is opening with your enquiry ready to send.';
+  const dialog = document.querySelector('.confirmation-dialog');
+  dialog.querySelector('.eyebrow').textContent = 'FORMA · ENQUIRY RECEIVED';
+  dialog.querySelector('h2').textContent = 'Thanks for reaching out.';
+  dialog.querySelector('p').textContent = 'Your sample enquiry is noted. We look forward to helping with your space.';
+  dialog.showModal();
   event.currentTarget.reset();
 });

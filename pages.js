@@ -5,34 +5,28 @@ document.querySelectorAll('.page-menu').forEach(button => button.addEventListene
   nav.classList.toggle('open', !open);
 }));
 
-document.querySelectorAll('.filter-row button').forEach(button => button.addEventListener('click', () => {
-  document.querySelectorAll('.filter-row button').forEach(tab => tab.classList.toggle('active', tab === button));
-  document.querySelectorAll('.page-product-card').forEach(card => {
-    card.hidden = button.dataset.filter !== 'all' && card.dataset.category !== button.dataset.filter;
-  });
-}));
-
 const cartCountNodes = document.querySelectorAll('.cart-count');
 const shoppingDialog = document.querySelector('.shopping-dialog');
 const shoppingItemsNode = document.querySelector('.shopping-items');
 const shoppingTotalNode = document.querySelector('.shopping-subtotal');
 let shoppingBag = [];
 try { shoppingBag = JSON.parse(localStorage.getItem('forma-demo-bag') || '[]'); } catch { shoppingBag = []; }
-const formatPrice = amount => `₹${Number(amount).toLocaleString('en-IN')}`;
+const formatPrice = amount => new Intl.NumberFormat('en-IN', {style:'currency', currency:'INR', maximumFractionDigits:0}).format(Number(amount));
 function saveShoppingBag() {
   try { localStorage.setItem('forma-demo-bag', JSON.stringify(shoppingBag)); } catch { /* demo can still run without storage */ }
   const count = shoppingBag.reduce((total, item) => total + item.quantity, 0);
   cartCountNodes.forEach(node => node.textContent = count);
   shoppingTotalNode?.replaceChildren(document.createTextNode(formatPrice(shoppingBag.reduce((total, item) => total + item.price * item.quantity, 0))));
+  const checkoutButton = document.querySelector('.proceed-checkout');
+  if (checkoutButton) checkoutButton.disabled = !shoppingBag.length;
   if (!shoppingItemsNode) return;
   if (!shoppingBag.length) {
     shoppingItemsNode.innerHTML = '<p class="shopping-empty">Your bag is empty for now.<br>Find a piece you love.</p>';
     return;
   }
   shoppingItemsNode.innerHTML = shoppingBag.map((item, index) => `<div class="shopping-line"><img src="${item.image}" alt=""><div><b>${item.name}</b><small>${formatPrice(item.price)} each</small><div class="shopping-quantity"><button type="button" data-quantity="minus" data-index="${index}" aria-label="Decrease ${item.name} quantity">−</button><span>${item.quantity}</span><button type="button" data-quantity="plus" data-index="${index}" aria-label="Increase ${item.name} quantity">+</button></div></div><span>${formatPrice(item.quantity * item.price)}</span><button type="button" data-remove-item="${index}" aria-label="Remove ${item.name}">×</button></div>`).join('');
-  const checkoutButton = document.querySelector('.proceed-checkout');
-  if (checkoutButton) checkoutButton.disabled = !shoppingBag.length;
 }
+
 function addShoppingItem(item) {
   const found = shoppingBag.find(existing => existing.id === item.id);
   if (found) found.quantity++;
@@ -40,24 +34,6 @@ function addShoppingItem(item) {
   saveShoppingBag();
 }
 saveShoppingBag();
-document.querySelectorAll('.page-product-card').forEach(card => {
-  const productLink = card.querySelector('a[href*="product.html"]');
-  const id = new URL(productLink.href).searchParams.get('id');
-  const name = card.querySelector('h2').textContent;
-  const price = Number(card.querySelector('.page-product-meta span').textContent.replace(/[^0-9]/g, ''));
-  const image = card.querySelector('img').getAttribute('src');
-  const actions = document.createElement('div');
-  actions.className = 'page-product-actions';
-  actions.innerHTML = `<button class="add-to-bag" type="button">Add to Cart <span>＋</span></button><a class="explore-product" href="${productLink.getAttribute('href')}">Explore <span>↗</span></a>`;
-  card.append(actions);
-  actions.querySelector('.add-to-bag').addEventListener('click', event => {
-    addShoppingItem({id, name, price, image});
-    const button = event.currentTarget;
-    button.innerHTML = 'Added <span>✓</span>';
-    shoppingDialog?.showModal();
-    window.setTimeout(() => { if (button.isConnected) button.innerHTML = 'Add to Cart <span>＋</span>'; }, 1300);
-  });
-});
 document.querySelector('.collection-bag')?.addEventListener('click', () => shoppingDialog?.showModal());
 document.querySelector('.shopping-close')?.addEventListener('click', () => shoppingDialog?.close());
 shoppingDialog?.addEventListener('click', event => { if (event.target === shoppingDialog) shoppingDialog.close(); });
@@ -87,7 +63,47 @@ document.querySelector('.checkout-form')?.addEventListener('submit', event => {
   document.querySelector('.shopping-confirmation')?.showModal();
 });
 
-const catalog = {
+const catalog = Object.fromEntries((window.formaCatalog || []).map(item => [item.id, {...item, images:[item.image]}]));
+const collectionGrid = document.querySelector('.page-product-grid');
+if (collectionGrid) {
+  const filterButtons = [...document.querySelectorAll('.filter-row button')];
+  const searchInput = document.querySelector('.collection-search');
+  const sortSelect = document.querySelector('.collection-sort');
+  const resultCount = document.querySelector('.collection-result-count');
+  const items = window.formaCatalog || [];
+  const heroMeta = document.querySelector('.page-hero-meta');
+  if (heroMeta) heroMeta.textContent = `${items.length} PIECES · MADE IN INDIA`;
+  filterButtons.forEach(button => {
+    const category = button.dataset.filter;
+    const count = category === 'all' ? items.length : items.filter(item => item.category.toLowerCase() === category).length;
+    button.innerHTML = `${button.dataset.label || button.textContent.trim().split(/\s+\d/)[0]} <span>${String(count).padStart(2, '0')}</span>`;
+    button.dataset.label = button.textContent.trim().replace(/\s+\d+$/, '');
+  });
+  const renderCollection = () => {
+    const activeCategory = document.querySelector('.filter-row button.active')?.dataset.filter || 'all';
+    const query = searchInput?.value.trim().toLowerCase() || '';
+    const visible = items.filter(item => (activeCategory === 'all' || item.category.toLowerCase() === activeCategory) && `${item.name} ${item.category} ${item.material}`.toLowerCase().includes(query));
+    if (sortSelect?.value === 'price-low') visible.sort((a,b) => a.price-b.price);
+    if (sortSelect?.value === 'price-high') visible.sort((a,b) => b.price-a.price);
+    if (sortSelect?.value === 'name') visible.sort((a,b) => a.name.localeCompare(b.name));
+    collectionGrid.innerHTML = visible.map(item => `<article class="page-product-card" data-category="${item.category.toLowerCase()}"><a class="catalog-image" href="product.html?id=${encodeURIComponent(item.id)}"><img src="${item.image}" alt="${item.name}" loading="lazy"><span class="catalog-image-index">FORMA / ${String(items.indexOf(item)+1).padStart(3,'0')}</span></a><p class="catalog-category">${item.category}</p><h2><a href="product.html?id=${encodeURIComponent(item.id)}">${item.name}</a></h2><div class="page-product-meta"><p>${item.material}</p><span>${formatPrice(item.price)}</span></div><div class="page-product-actions"><button class="add-to-bag" type="button" data-add="${item.id}">Add to Cart <span>＋</span></button><a class="explore-product" href="product.html?id=${encodeURIComponent(item.id)}">View piece <span>↗</span></a></div></article>`).join('');
+    if (resultCount) resultCount.textContent = `${visible.length} ${visible.length === 1 ? 'piece' : 'pieces'}`;
+    collectionGrid.querySelectorAll('[data-add]').forEach(button => button.addEventListener('click', event => {
+      const item = items.find(product => product.id === event.currentTarget.dataset.add);
+      addShoppingItem({id:item.id,name:item.name,price:item.price,image:item.image});
+      shoppingDialog?.showModal();
+    }));
+  };
+  filterButtons.forEach(button => button.addEventListener('click', () => {
+    filterButtons.forEach(tab => tab.classList.toggle('active', tab === button));
+    renderCollection();
+  }));
+  searchInput?.addEventListener('input', renderCollection);
+  sortSelect?.addEventListener('change', renderCollection);
+  renderCollection();
+}
+
+/*
   'sunday-sofa': {name:'The Sunday Sofa', category:'Seating', price:'₹1,48,000', material:'Solid teak · Natural linen', description:'Room to stretch out, settle in, and stay a little longer. Sunday pairs a kiln-dried teak frame with relaxed, removable linen upholstery.', images:['sofa1.webp','sofa2.jpg','sofa3.jpg'], size:'W 220 × D 92 × H 78 cm', lead:'Made to order · 6–8 weeks'},
   'gather-table': {name:'The Gather Table', category:'Tables', price:'₹86,000', material:'Solid oak · Smoked finish', description:'A generous everyday table with softened edges and a calm, sturdy silhouette. Built for long lunches and all the little things in between.', images:['dining1.avif','dining2.jpg','dining3.webp'], size:'W 180 × D 90 × H 76 cm', lead:'Ready in 2–3 weeks'},
   'sunday-chair': {name:'Sunday Lounge Chair', category:'Seating', price:'₹62,500', material:'American walnut · Saddle leather', description:'A low, welcoming seat with a sculpted timber frame and supple leather that grows more beautiful with time.', images:['chair1.jpg','chair2.webp','chair3.jpg'], size:'W 76 × D 82 × H 79 cm', lead:'Made to order · 4–6 weeks'},
@@ -109,22 +125,83 @@ const catalog = {
   'walnut-bookcase': {name:'Walnut Bookcase', category:'Storage', price:'₹78,000', material:'Solid walnut · Hand finished', description:'An open bookcase with five staggered shelves and a lower cabinet for the things best kept close at hand.', images:['forma-walnut-bookcase.png','wardrobe4.jpg','wardrobe3.jpg'], size:'W 92 × D 34 × H 188 cm', lead:'Made to order · 6–8 weeks'},
   'cane-bedroom-bench': {name:'Cane Bedroom Bench', category:'Bedroom', price:'₹36,000', material:'Natural oak · Woven cane', description:'A low bedroom bench with a handwoven cane seat and a light oak frame, useful at the foot of the bed or in a quiet corner.', images:['forma-cane-bedroom-bench.png','chair2.webp','bed3.webp'], size:'W 110 × D 38 × H 44 cm', lead:'Made to order · 4–6 weeks'}
 };
+*/
 
 const productPage = document.querySelector('[data-product-page]');
 if (productPage) {
-  const id = new URLSearchParams(location.search).get('id') || 'sunday-sofa';
-  const item = catalog[id] || catalog['sunday-sofa'];
+  const id = new URLSearchParams(location.search).get('id') || Object.keys(catalog)[0];
+  const item = catalog[id] || catalog[Object.keys(catalog)[0]];
   document.title = `${item.name} — Forma`;
   document.querySelector('.detail-copy h1').textContent = item.name;
-  document.querySelector('.detail-price').textContent = item.price;
+  document.querySelector('.detail-price').textContent = formatPrice(item.price);
   document.querySelector('.detail-summary').textContent = item.description;
   const facts = document.querySelectorAll('.detail-facts dd');
   facts[0].textContent = item.material; facts[1].textContent = item.size; facts[2].textContent = item.lead;
+  const galleryImages = item.gallery || [item.image, item.image, item.image];
   document.querySelectorAll('.detail-gallery img').forEach((img, index) => {
-    img.src = `image%20assets/${item.images[index]}`;
+    img.hidden = false;
+    img.src = galleryImages[index] || item.image;
+    img.loading = 'eager';
+    img.decoding = 'async';
+    img.tabIndex = 0;
+    img.setAttribute('role', 'button');
+    img.setAttribute('aria-label', `Zoom ${item.name}, view ${index + 1}`);
+    img.title = 'Click to zoom';
     img.alt = `${item.name} — view ${index + 1}`;
   });
-  const selectedItem = {id, name:item.name, price:Number(item.price.replace(/[^0-9]/g, '')), image:`image%20assets/${item.images[0]}`};
+  const careByCategory = {
+    Seating: 'Vacuum fabric gently with an upholstery attachment. Blot spills with a clean, dry cloth and avoid harsh cleaners.',
+    Tables: 'Wipe with a soft, dry cloth. Use coasters for hot or wet items and avoid prolonged direct sunlight.',
+    Bedroom: 'Dust timber with a soft cloth. Air linens regularly and follow the upholstery label for spot cleaning.',
+    Storage: 'Dust with a soft cloth and keep away from standing water. Open doors gently and distribute stored weight evenly.'
+  };
+  const productDetails = document.createElement('details');
+  productDetails.className = 'detail-care-panel';
+  const detailsSummary = document.createElement('summary');
+  detailsSummary.textContent = 'Care and delivery details';
+  productDetails.append(detailsSummary);
+  const careCopy = document.createElement('p');
+  careCopy.innerHTML = '<b>Care</b>';
+  careCopy.append(document.createTextNode(careByCategory[item.category] || careByCategory.Storage));
+  const deliveryCopy = document.createElement('p');
+  deliveryCopy.innerHTML = '<b>Delivery</b>';
+  deliveryCopy.append(document.createTextNode(`${item.lead}. We will confirm delivery timing with you before dispatch.`));
+  productDetails.append(careCopy, deliveryCopy);
+  document.querySelector('.detail-facts')?.after(productDetails);
+
+  const zoomDialog = document.createElement('dialog');
+  zoomDialog.className = 'image-zoom-dialog';
+  zoomDialog.setAttribute('aria-label', `${item.name} image viewer`);
+  zoomDialog.innerHTML = '<button class="zoom-close" type="button" aria-label="Close image viewer">&times;</button><button class="zoom-previous" type="button" aria-label="Previous image">&#8249;</button><figure><img class="zoomed-product-image" alt=""><figcaption></figcaption></figure><button class="zoom-next" type="button" aria-label="Next image">&#8250;</button><span class="zoom-hint">Use arrow keys to view each angle</span>';
+  document.body.append(zoomDialog);
+  const zoomImage = zoomDialog.querySelector('.zoomed-product-image');
+  const zoomCaption = zoomDialog.querySelector('figcaption');
+  const galleryNodes = [...document.querySelectorAll('.detail-gallery img')];
+  const viewNames = ['Front view', 'Side view', 'Rear view'];
+  let activeImageIndex = 0;
+  const showZoomImage = index => {
+    activeImageIndex = (index + galleryNodes.length) % galleryNodes.length;
+    const source = galleryNodes[activeImageIndex];
+    zoomImage.src = source.currentSrc || source.src;
+    zoomImage.alt = source.alt;
+    zoomCaption.textContent = `${item.name} / ${viewNames[activeImageIndex] || `View ${activeImageIndex + 1}`}`;
+  };
+  const openZoom = index => { showZoomImage(index); zoomDialog.showModal(); };
+  galleryNodes.forEach((img, index) => {
+    img.addEventListener('click', () => openZoom(index));
+    img.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openZoom(index); }
+    });
+  });
+  zoomDialog.querySelector('.zoom-close').addEventListener('click', () => zoomDialog.close());
+  zoomDialog.querySelector('.zoom-previous').addEventListener('click', () => showZoomImage(activeImageIndex - 1));
+  zoomDialog.querySelector('.zoom-next').addEventListener('click', () => showZoomImage(activeImageIndex + 1));
+  zoomDialog.addEventListener('click', event => { if (event.target === zoomDialog) zoomDialog.close(); });
+  zoomDialog.addEventListener('keydown', event => {
+    if (event.key === 'ArrowLeft') showZoomImage(activeImageIndex - 1);
+    if (event.key === 'ArrowRight') showZoomImage(activeImageIndex + 1);
+  });
+  const selectedItem = {id, name:item.name, price:item.price, image:item.image};
   document.querySelector('.detail-add-to-bag')?.addEventListener('click', () => {
     addShoppingItem(selectedItem);
     shoppingDialog?.showModal();

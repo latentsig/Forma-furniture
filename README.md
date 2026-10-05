@@ -42,3 +42,9 @@ The site is also currently running at <http://127.0.0.1:8002/>.
 - Open the journal story from either journal link.
 
 Checkout is a front-end demo: it shows an order confirmation and clears the bag without taking payment or sending/storing an order. The demo bag is stored in browser local storage. Enquiries open a prefilled draft in the visitor’s email app. This static site does not process payments or persist submissions.
+
+## Expanded collection
+
+The Collections page contains 100 furniture pieces across Seating, Tables, Bedroom, and Storage (25 items per category). Each listing has a unique, locally stored primary photo plus front, side, and rear gallery views, searchable details, a category filter, price sorting, and a linked product page. Prices, dimensions, materials, and lead times are sample demo content.
+
+The catalog primary photos and 200 alternate angle photos were AI-generated for this demo and stored as individual files in `image assets/`. Each catalog item uses its own image; no external image service is required for the collection.
