@@ -75,79 +75,69 @@ required merchant configuration.
 
 ## Phase 2 — TypeScript migration and storefront parity
 
-**Status:** BLOCKED — the migrated storefront builds and its core catalogue,
-gallery, cart and route checks pass. The agreed 320px and 390px responsive
-checks, saved Phase 2 screenshots and automated Playwright parity checks remain
-unverified, so the phase is not marked PASS. The old root implementation has
-been removed on this branch as requested; its original images are preserved in
-the frontend.
+**Status:** PASS — the TypeScript storefront production build, responsive
+acceptance checks, saved screenshots, route behavior and automated E2E suite
+were verified against the current source.
 
-**Branch:** `phase-2-typescript-storefront`, based on the Phase 1 commit.
+**Branch:** `phase-2-typescript-storefront`, based on the Phase 1 baseline.
 
-**Files created/changed:** Next.js package, lockfile and configuration plus
-TypeScript routes in `frontend/`; typed catalogue conversion; typed shared
-storefront/cart/gallery; read-only asset route with path containment checks;
-backend Node.js TypeScript health server; Phase 2 unit checks. The old root
-HTML/CSS/JavaScript and README were removed after the replacement built and core
-catalogue/gallery/cart/route checks passed. All 345 image files were moved
-unchanged to `frontend/public/image assets/`.
+**Files created/changed:** Next.js package and TypeScript configuration,
+frontend routes and storefront components, typed catalogue/cart/gallery, media
+route, backend Node.js TypeScript health server, Playwright configuration and
+E2E suite, package lock, this status report, and Phase 2 mobile screenshots.
+The old root HTML/CSS/JavaScript implementation and README were removed after
+replacement checks. All 345 original image files were moved unchanged to
+`frontend/public/image assets/`.
 
-**Behavior migrated in source:** homepage with the enquiry preview, collection
-search/category filters and sorting, product detail with explicit not-found
-behavior, three-image gallery with previous/next controls and keyboard support,
-one demo cart shared across routes (including safe migration from the previous
-local bag), old `.html` route redirects, and the spaces/craft/journal/visit
-pages. Demo cart, checkout and enquiry interactions clearly state that they do
-not create orders or deliver messages. This is not production commerce.
+**Behavior migrated:** homepage and preview enquiry, collection category/search/
+sorting, product details and not-found handling, three-view gallery with
+keyboard-accessible zoom, shared demo cart including safe migration from the
+legacy local bag, all seven former `.html` route redirects, and the spaces,
+craft, journal and visit pages. The cart, checkout and enquiry clearly state
+that they do not create orders or deliver messages. This phase does not claim
+production commerce.
 
 **Checks actually run:**
 
-- Catalogue tests with Node's TypeScript stripping: 3 passed, 0 failed, 0 skipped
-  (100 catalogue IDs/category totals, 300 existing gallery references, original
-  image route response and path traversal rejection).
-- TypeScript syntax transpilation: 16 `.ts`/`.tsx` files scanned, 0 syntax
-  diagnostics.
-- Global TypeScript 5.9.3 strict check of `frontend/src/catalog.ts`: passed.
-- Global TypeScript 5.9.3 strict check of `backend/server.ts` using the installed
-  Node type definitions: passed.
-- Backend smoke check: `/health` returned `200` JSON; unknown route returned 404.
-- Next.js production build using Webpack: passed from an exact source snapshot in
-  the writable C: workspace. The repository D: drive has about 114 MB free, so
-  dependencies and build output were kept in the C: workspace. The snapshot
-  reads the unchanged source catalogue images from the repository.
-- `npm run typecheck`: passed with TypeScript 5.9.3.
-- `npm test` (Vitest): 4 passed, 0 failed, 0 skipped, including legacy cart
-  shape validation and hostile/unknown catalog ID rejection.
-- `npm run test:node`: 3 passed, 0 failed, 0 skipped (catalogue counts, original
-  300 gallery references, image route response and traversal rejection).
-- Backend strict TypeScript check: passed; backend smoke check returned 200 for
-  `/health` and 404 for an unknown route.
-- HTTP smoke check: homepage, collection, valid product, spaces, craft, journal,
+- Next.js production build with Webpack: passed on the exact current `frontend/src`
+  TypeScript source in the writable C: build workspace; all 9 app/API routes
+  compiled and generated.
+- `npm run typecheck`: passed, 0 TypeScript errors.
+- `npm test -- --run` (Vitest): 4 passed, 0 failed, 0 skipped.
+- `npm run test:node`: 3 passed, 0 failed, 0 skipped, including 100 catalogue
+  IDs/category totals, all 300 gallery references, media response and traversal
+  rejection.
+- `npm run test:e2e` (Playwright): 11 passed, 0 failed, 0 skipped against the
+  fresh production build. Coverage includes 320/390/480/768/1280 CSS-pixel
+  collection widths; 320/390 homepage widths; navigation; category/search/sort
+  and empty state; product gallery thumbnails, zoom, keyboard controls, bag and
+  cross-route cart persistence; demo checkout; seven legacy redirects; valid and
+  invalid product routes; all storefront routes, health API and zero console or
+  page errors on expected-success routes.
+- Backend strict TypeScript check: passed. Backend smoke checks: `/health` 200
+  JSON and unknown route 404.
+- HTTP smoke check: home, collection, valid product, spaces, craft, journal,
   visit, health and original image route returned 200; invalid product ID
   returned 404.
-- Manual browser verification: collection filter showed 25 items; `sunday`
-  search showed 1; zoom next changed the image to the side view; add-to-bag
-  and buy-now preview updated the shared bag; the previous `.html` collection
-  URL redirected to the new route. Test bag was cleared afterward. Home enquiry
-  preview renders and explicitly says no message is delivered.
-- Responsive overflow check: 480, 768 and 1280 CSS-pixel widths had no document
-  overflow. The in-app browser clamps its viewport to 480 CSS pixels, so 320 and
-  390 widths could not be set. Automated Playwright E2E checks were not run.
+- `git diff --check`: passed; root source boundaries contain no authored
+  `.html`, `.css` or `.js` files under `frontend/` or `backend/`.
 
-**Screenshots:** Phase 2 desktop, 480px mobile collection, and 480px mobile home
-were visually inspected in the browser but were not saved as files. Phase 0
-baseline images remain in `docs/screenshots/` and are not evidence for the new
-TypeScript storefront.
+**Screenshots:** `docs/screenshots/phase2-collection-320.png`,
+`phase2-collection-390.png` and `phase2-home-390.png` were captured by Playwright
+at 320 × 844 and 390 × 844 CSS pixels. Their content and layout were visually
+reviewed. These are Phase 2 evidence; Phase 0 screenshots remain historical
+baseline only.
 
-**Security / compatibility:** no API/payment secrets are present. The new image
-route only serves raster formats from inside `frontend/public/image assets/` and
-rejects path traversal. The backend exposes only a local health endpoint; no
-commerce API, auth, database or payment integration is claimed. Existing old
-route bookmarks redirect to the corresponding Next.js routes.
+**Security / compatibility:** no API/payment secrets are present. The media
+route serves only raster formats from inside the frontend asset directory and
+rejects path traversal. Old route bookmarks redirect to matching Next.js pages.
+The backend currently exposes only a local health endpoint; commerce, auth,
+database and payment services are not implemented in Phase 2. The browser
+generates HTML/CSS/JavaScript at runtime, while authored app source is TS/TSX.
 
-**Remaining blockers:** save browser screenshots and verify 320 and 390 CSS-pixel
-layouts in a browser that supports those viewport widths; add/run Playwright E2E
-parity coverage. Once those checks pass, Phase 2 can receive PASS.
+**Remaining Phase 2 blockers:** none against the Phase 2 acceptance criteria.
+Native device testing, full accessibility review, production hardening and
+commerce services remain in their scheduled later phases.
 
-**Next phase allowed:** NO — Phase 2 acceptance is blocked. Do not begin Phase 3
-until the remaining viewport and E2E checks pass.
+**Next phase allowed:** YES — proceed to Phase 3 (backend, PostgreSQL and product
+data) only. Do not skip ahead to later phases.

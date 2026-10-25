@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:node": "node --experimental-strip-types src/catalog.node.test.ts",
-    "test:vitest": "vitest run"
+    "test:vitest": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "next": "16.3.8",
@@ -17,6 +18,7 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
