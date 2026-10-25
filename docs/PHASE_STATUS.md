@@ -79,7 +79,8 @@ required merchant configuration.
 acceptance checks, saved screenshots, route behavior and automated E2E suite
 were verified against the current source.
 
-**Branch:** `phase-2-typescript-storefront`, based on the Phase 1 baseline.
+**Branch / commit:** `phase-2-typescript-storefront` at `da705da`, based on the
+Phase 1 baseline.
 
 **Files created/changed:** Next.js package and TypeScript configuration,
 frontend routes and storefront components, typed catalogue/cart/gallery, media
@@ -141,3 +142,70 @@ commerce services remain in their scheduled later phases.
 
 **Next phase allowed:** YES — proceed to Phase 3 (backend, PostgreSQL and product
 data) only. Do not skip ahead to later phases.
+
+## Phase 3 — Backend, PostgreSQL and product data
+
+**Status:** IN PROGRESS — a real PostgreSQL-backed typed product API, migration,
+transactional seed and integration suite have been implemented and verified.
+The Next.js storefront still reads the Phase 2 typed catalogue directly; wiring
+storefront reads to this API is the next Phase 3 task.
+
+**Branch:** `phase-3-backend-postgres`, created from Phase 2 commit `da705da`.
+
+**Files created/changed:** TypeScript Drizzle schema/config, generated SQL
+migration, PostgreSQL connection, catalog query service, Node HTTP API,
+transactional TypeScript seed, PostgreSQL integration tests, package lock and
+environment example under `backend/`; `.env.local` is ignored and untracked.
+
+**Implemented behavior:**
+
+- `GET /health` reports process liveness; `GET /ready` checks a live DB query.
+- `GET /api/products` supports bounded pagination, category and case-insensitive
+  name/material/category search, and deterministic featured/name/price sorting.
+- `GET /api/products/:id-or-slug` returns published records or 404.
+- Product rows have stable IDs/slugs, category enum, integer paise prices,
+  product/gallery fields, publication flag, content approval status, timestamps
+  and database indexes.
+- `db:seed` imports all 100 existing typed catalogue records in a transaction;
+  repeating it updates matching records and does not create duplicates. Every
+  record is marked `sample` and the API returns the price as integer paise.
+- Queries use parameterized Drizzle expressions; invalid categories, sort,
+  search length and page bounds return 400. Cross-origin calls must match the
+  configured exact `FRONTEND_ORIGIN`.
+
+**Checks actually run:**
+
+- `npm run typecheck` in `backend/`: passed.
+- `npm run db:generate`: emitted migration from the TypeScript schema.
+- `npm run db:migrate`: passed; rerun during integration setup also passed.
+- `npm run db:seed`: inserted 100 sample records; subsequent seed during test
+  setup passed again.
+- `npm run test:integration`: 6 passed, 0 failed, 0 skipped against PostgreSQL.
+  Checks cover DB readiness, record count and paise conversion, category/search
+  filters and literal wildcard handling, price ordering, ID/slug/not-found,
+  query validation and CORS rejection/preflight.
+- Local service smoke check: `/health` returned `ok`, `/ready` returned
+  `connected`, and the product endpoint returned total 100 with the requested
+  two-row page.
+- Runtime dependency audit: `npm audit --omit=dev` reported 0 vulnerabilities.
+
+**Database / secrets:** the existing local PostgreSQL service on port 5432 was
+left untouched because its credentials are not available. An isolated
+PostgreSQL 16 development cluster runs on loopback port 55432 in the authorized
+C: workspace. A randomly generated local-only credential is stored in ignored
+`backend/.env.local`; no credential is committed or returned in logs. This is
+development data, not a production database or deployment configuration.
+
+**Security / compatibility:** API binds to `127.0.0.1` by default and sends
+`nosniff`, no-store and referrer-policy headers. Product facts remain
+`sample`; no merchant-approved content, inventory, cart, orders, authentication
+or payment flows are claimed. The storefront has not yet been switched to read
+these records from the API.
+
+**Remaining Phase 3 work:** connect Next.js catalog/detail reads to the backend
+API with visible loading/error behavior; add combined browser/database checks;
+document deployment database configuration and operational migration procedure.
+Merchant approval of product facts remains required before production
+publication.
+
+**Next phase allowed:** NO — Phase 3 is in progress; do not start Phase 4.
