@@ -16,7 +16,7 @@ export default defineConfig({
   },
   webServer: process.env.PLAYWRIGHT_BASE_URL ? undefined : {
     command: 'npm run start -- --hostname 127.0.0.1 --port 3100',
-    url: 'http://127.0.0.1:3100/api/health',
+    url: 'http://127.0.0.1:3100/api/ready',
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
     env: {

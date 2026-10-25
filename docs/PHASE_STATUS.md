@@ -253,7 +253,9 @@ automated checks on a separate branch. Production acceptance remains blocked
 on operator provisioning and merchant decisions listed below.
 
 **Branch / base commit:** `phase-4-auth-admin-rbac`, branched from completed
-Phase 3 commit `f780168`. Changes are currently uncommitted on this branch.
+Phase 3 commit `f780168`. Its implementation commit `5a49359` was merged to
+`main` by merge commit `cc0bf76` on 2026-10-25. Production acceptance remains
+blocked as described below.
 
 **Implemented in this increment:**
 
@@ -459,8 +461,8 @@ Phase 4 as passed or authorize production commerce.
 
 **Status:** IN PROGRESS locally; BLOCKED for merchant/production checkout.
 
-**Branch / base:** `phase-4-auth-admin-rbac`; existing Phase 4 changes remain
-uncommitted alongside this development increment. Phase 4 production status is
+**Branch / base:** `phase-4-auth-admin-rbac`; Phase 4 and Phase 5 implementation
+are included in the `main` merge commit `cc0bf76`. Phase 4 production status is
 still BLOCKED and was not changed to PASS.
 
 **Implemented so far:**
@@ -708,3 +710,63 @@ logic only; it makes no image API request and does not alter original images.
 **Next phase allowed:** NO. Phase 8 remains blocked until Phase 6 and other
 entry criteria are met and a real source asset's SKU/rights and budget are
 approved. No generation or publication has occurred.
+
+## Recovery R0 — merged baseline audit
+
+**Status:** PASS for source/status audit. No Phase 4–8 production acceptance is
+implied.
+
+**Inspected main:** `origin/main` at merge commit `cc0bf7641403ebbe0656dd8ada62251ecee9455c`, which merges PR #1 and includes feature commit `5a49359`. Before edits the local feature branch worktree was clean; recovery branch `recovery/r0-r1-staging` was created directly from the fetched `origin/main`. No hard reset, clean, stash or force push was used.
+
+**Audit:** route/API/database/test inventory, feature state and prioritized
+customer-journey findings are in [`RECOVERY_AUDIT.md`](RECOVERY_AUDIT.md) and
+[`DEMO_ACCEPTANCE.md`](DEMO_ACCEPTANCE.md). The earlier statement that Phase 4–5
+changes remained uncommitted was stale after PR #1 merged and has been corrected.
+
+**Source defect found:** merged `backend/src/auth/customer-service.ts` was
+syntactically invalid because `validateCustomerPassword` lacked a closing brace.
+Node startup failed with `ERR_INVALID_TYPESCRIPT_SYNTAX`; the recovery branch
+restores the missing brace. Backend strict typecheck, runtime config tests, API
+readiness and the PostgreSQL integration suite are recorded in the recovery
+audit.
+
+## Recovery R1 — local/staging deployment reliability
+
+**Status:** IN PROGRESS pending frontend production-build/route/browser evidence
+and container/hosted staging evidence. Do not use this status as production
+acceptance or as permission to start payment/AI implementation.
+
+**Implemented on `recovery/r0-r1-staging`:**
+
+- Server-only API origin validation now rejects a missing or loopback backend
+  origin in production; development retains a loopback default. Production
+  canonical site metadata requires an explicit HTTPS `NEXT_PUBLIC_SITE_URL`.
+- Backend binds to loopback by default locally. Production startup requires an
+  explicit `HOST`, valid `PORT`, exact HTTPS storefront/customer origins and a
+  32-byte hex MFA key. Compose staging binds inside its private service network
+  while publishing only loopback host ports.
+- Frontend `/api/ready` now checks backend `/ready` and PostgreSQL, separately
+  from web liveness `/api/health`.
+- Added Node 24 multi-stage Dockerfiles, isolated PostgreSQL 16 Compose staging
+  with one-off migrations/sample seed, CI with a disposable PostgreSQL service,
+  and the deployment/demo/recovery documents.
+- Browser screenshot outputs now go to ignored Playwright test artifacts rather
+  than overwriting committed historical evidence. Playwright waits for the
+  composed readiness endpoint.
+
+**Staging evidence so far:** local PostgreSQL 16.15 database
+`forma_furniture_staging` was created after confirming the configured DB host
+was loopback. Migrations applied; the existing 100 records were seeded as
+samples. A running API on loopback returned `/health` 200, `/ready` 200 with
+database connected, 100 catalogue rows, and 404 for an unknown product. The
+backend typecheck passed; runtime config passed 2/2, payment 3/3, fulfillment
+3/3, AI guard 4/4, and the PostgreSQL integration suite passed 23/23 (0 failed,
+0 skipped) after matching the existing test's configured CORS origin. See
+[`RECOVERY_AUDIT.md`](RECOVERY_AUDIT.md) for command/tool constraints.
+
+**Remaining R1 gates:** production frontend build and browser smoke against the
+staging API/database; Docker Compose build/health verification (Docker daemon is
+not available in the current environment); and a hosted staging URL (no Vercel
+or API hosting credentials/domain were provided). Until these are evidenced,
+R1 cannot receive a hosted-staging PASS. No payment, COD, AI or production
+acceptance has been enabled.

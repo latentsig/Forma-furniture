@@ -1,10 +1,10 @@
 import { timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { getFormaApiOrigin } from '@/server/api-origin';
 
 export const dynamic = 'force-dynamic';
 const cookieName = 'forma_customer_session';
 const stateCookie = 'forma_facebook_state';
-const apiOrigin = process.env.FORMA_API_URL ?? 'http://127.0.0.1:4100';
 const cookiePath = '/api/customer/facebook';
 const clearCookie = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, path: cookiePath, maxAge: 0 };
 
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
   try { configuredCallback = new URL(redirectUri); } catch { return redirectWithError(request, 'facebook-not-configured'); }
   if (configuredCallback.origin !== request.nextUrl.origin || configuredCallback.pathname !== '/api/customer/facebook/callback') return redirectWithError(request, 'facebook-not-configured');
   try {
-    const upstream = await fetch(new URL('/api/customers/facebook', apiOrigin), {
+    const upstream = await fetch(new URL('/api/customers/facebook', getFormaApiOrigin()), {
       method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code, redirectUri }), signal: AbortSignal.timeout(12_000),
     });

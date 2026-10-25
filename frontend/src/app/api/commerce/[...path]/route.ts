@@ -2,10 +2,10 @@ import { randomBytes } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { isSameOriginRequest } from '../../same-origin';
+import { getFormaApiOrigin } from '@/server/api-origin';
 
 const guestCookieName = 'forma_guest_cart';
 const customerCookieName = 'forma_customer_session';
-const apiOrigin = process.env.FORMA_API_URL ?? 'http://127.0.0.1:4100';
 type RouteContext = { params: Promise<{ path: string[] }> };
 const allowedRoutes = new Set(['cart', 'cart/lines', 'quotes', 'orders']);
 
@@ -24,7 +24,7 @@ async function proxy(request: NextRequest, context: RouteContext, method: 'GET' 
     catch { return NextResponse.json({ error: 'Request body must be valid JSON.' }, { status: 400 }); }
   }
   try {
-    const upstream = await fetch(new URL(`/api/commerce/${action}`, apiOrigin), {
+    const upstream = await fetch(new URL(`/api/commerce/${action}`, getFormaApiOrigin()), {
       method, cache: 'no-store',
       headers: {
         'X-Forma-Guest-Cart': guestToken,

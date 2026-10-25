@@ -1,4 +1,5 @@
 import type { Category, Product } from './catalog';
+import { getFormaApiOrigin } from './server/api-origin';
 
 type ApiProduct = {
   id: string; name: string; category: Category; pricePaise: number; material: string;
@@ -28,7 +29,7 @@ function toProduct(item: ApiProduct): Product {
 }
 
 export async function getCatalog(): Promise<Product[]> {
-  const baseUrl = process.env.FORMA_API_URL ?? 'http://127.0.0.1:4100';
+  const baseUrl = getFormaApiOrigin();
   const items: ApiProduct[] = [];
   let total: number | undefined;
   for (let offset = 0; total === undefined || offset < total; offset += 100) {
@@ -55,7 +56,7 @@ export async function getCatalog(): Promise<Product[]> {
 }
 
 export async function getCatalogProduct(id: string): Promise<Product | null> {
-  const baseUrl = process.env.FORMA_API_URL ?? 'http://127.0.0.1:4100';
+  const baseUrl = getFormaApiOrigin();
   const response = await fetch(new URL(`/api/products/${encodeURIComponent(id)}`, baseUrl), { cache: 'no-store' });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`Catalog service returned ${response.status}`);

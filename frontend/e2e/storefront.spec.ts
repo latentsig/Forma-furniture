@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 import { resolve } from 'node:path';
 
 const productId = 'forma-001-sunday-oak-lounge-chair';
+const backendOrigin = process.env.TEST_API_URL ?? process.env.FORMA_API_URL ?? 'http://127.0.0.1:4100';
+const screenshotPath = (name: string) => resolve(process.cwd(), 'test-results', 'screenshots', name);
 
 test.describe('responsive storefront', () => {
   for (const width of [320, 390, 480, 768, 1280]) {
@@ -19,7 +21,7 @@ test.describe('responsive storefront', () => {
       expect(dimensions.body, JSON.stringify(dimensions)).toBeLessThanOrEqual(width);
       if (width === 320 || width === 390) {
         await page.screenshot({
-          path: resolve(process.cwd(), '..', 'docs', 'screenshots', `phase3-collection-${width}.png`),
+          path: screenshotPath(`collection-${width}.png`),
         });
       }
     });
@@ -51,7 +53,7 @@ test.describe('responsive storefront', () => {
       expect(dimensions.document, JSON.stringify(dimensions)).toBeLessThanOrEqual(width);
       expect(dimensions.body, JSON.stringify(dimensions)).toBeLessThanOrEqual(width);
       if (width === 390) {
-        await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase3-home-390.png') });
+        await page.screenshot({ path: screenshotPath('home-390.png') });
       }
     }
   });
@@ -59,7 +61,7 @@ test.describe('responsive storefront', () => {
 
 test.describe('catalogue and shopping demo', () => {
   test('storefront renders records and paise prices from the PostgreSQL catalog API', async ({ page, request }) => {
-    const api = await request.get('http://127.0.0.1:4100/api/products?sort=featured&limit=100&offset=0');
+    const api = await request.get(new URL('/api/products?sort=featured&limit=100&offset=0', backendOrigin).toString());
     expect(api.status()).toBe(200);
     const pageData = await api.json() as { items: Array<{ id: string; name: string; pricePaise: number; image: string }>; total: number };
     expect(pageData.total).toBe(100);
@@ -161,6 +163,12 @@ test('all storefront routes render and health endpoint is available', async ({ p
   expect(health.status()).toBe(200);
   await expect(health).toBeOK();
   await expect(health.json()).resolves.toMatchObject({ status: 'ok' });
+  const ready = await request.get('/api/ready');
+  expect(ready.status()).toBe(200);
+  await expect(ready.json()).resolves.toMatchObject({ status: 'ready', dependencies: { commerceApi: 'connected', database: 'connected' } });
+  const backendReady = await request.get(new URL('/ready', backendOrigin).toString());
+  expect(backendReady.status()).toBe(200);
+  await expect(backendReady.json()).resolves.toMatchObject({ status: 'ready', database: 'connected' });
   expect(browserErrors).toEqual([]);
   const missingProduct = await page.goto('/product?id=not-a-real-product');
   expect(missingProduct?.status()).toBe(404);
@@ -172,7 +180,7 @@ test('admin tools require authentication and the browser proxy rejects cross-ori
   await page.goto('/admin');
   await expect(page.getByRole('heading', { name: 'Administrator sign in' })).toBeVisible();
   await expect(page.getByLabel('Authenticator code')).toBeVisible();
-  await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase4-admin-login-390.png') });
+  await page.screenshot({ path: screenshotPath('admin-login-390.png') });
 
   const unauthenticated = await request.get('/api/admin/products');
   expect(unauthenticated.status()).toBe(401);
@@ -204,7 +212,7 @@ test('administrator password recovery keeps MFA and consumes the reset link once
   await expect(page.getByRole('heading', { name: 'Set a new administrator password' })).toBeVisible();
   await expect(page.getByText(/authenticator remains required/)).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase4-admin-password-reset-390.png') });
+  await page.screenshot({ path: screenshotPath('admin-password-reset-390.png') });
   await page.getByLabel('New password').fill('A-New-Strong-Password-4831');
   await page.getByRole('button', { name: 'Update password' }).click();
   await expect(page.getByRole('status')).toContainText(/authenticator is still required/i);
@@ -239,7 +247,7 @@ test('lost authenticator recovery enrolls and verifies a replacement before rest
   await expect(page.getByRole('heading', { name: 'Recover administrator access' })).toBeVisible();
   await expect(page.getByRole('img', { name: 'Private Forma Furniture replacement authenticator QR code' })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase4-admin-access-recovery-390.png') });
+  await page.screenshot({ path: screenshotPath('admin-access-recovery-390.png') });
   await page.getByLabel('New password').fill('Replacement-Admin-Password-8402');
   await page.getByLabel('Current six-digit authenticator code').fill('123456');
   await page.getByRole('button', { name: 'Verify and recover access' }).click();
@@ -255,7 +263,7 @@ test('customer account has sign-in, registration, recovery and social provider e
   await expect(page.getByRole('link', { name: 'Continue with Google' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Continue with Facebook' })).toBeVisible();
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-  await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase4-account-social-390.png') });
+  await page.screenshot({ path: screenshotPath('account-social-390.png') });
   await expect(page.getByLabel('Email address')).toBeVisible();
   await page.getByRole('button', { name: 'Create account', exact: true }).first().click();
   await expect(page.getByLabel('Full name')).toBeVisible();
@@ -264,7 +272,7 @@ test('customer account has sign-in, registration, recovery and social provider e
   await page.getByRole('button', { name: 'Forgot password?' }).click();
   await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Send reset link' })).toBeVisible();
-  await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase4-account-390.png') });
+  await page.screenshot({ path: screenshotPath('account-390.png') });
 });
 
 test('Facebook sign-in reports missing local Meta configuration without exposing credentials', async ({ page }) => {
@@ -312,7 +320,7 @@ test('first owner setup page is one-time and visibly includes mandatory authenti
     await expect(page.getByText(/Initial setup is closed/)).toBeVisible();
     return;
   }
-  await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase4-admin-setup-390.png') });
+  await page.screenshot({ path: screenshotPath('admin-setup-390.png') });
   const setupAttempt = await page.evaluate(async () => {
     const response = await fetch('/api/admin/bootstrap/begin', {
       method: 'POST',
