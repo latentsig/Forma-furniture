@@ -36,7 +36,7 @@ Backend API groups inspected in `backend/src/server.ts`:
 3. **Backend binding failure:** the API always listened on `127.0.0.1`, inaccessible to a separate frontend container/service. It now defaults to loopback locally; production requires an explicit `HOST`, with staging compose binding `0.0.0.0` inside its isolated network and host ports restricted to loopback. Production startup validates port, HTTPS frontend/customer origins and the MFA encryption key.
 4. **No deployment repeatability:** merged `main` had no committed workflow, Dockerfiles or staging compose. R1 adds PostgreSQL 16 staging compose, multi-stage images, sample-only initialization, health checks and CI. The CI PostgreSQL fixture is isolated and test-only.
 5. **No composed readiness check:** frontend `/api/health` previously showed only that Next.js answered. `/api/ready` now fails closed unless the backend and PostgreSQL both report ready; Playwright uses that URL before browser tests.
-6. **Windows EPERM:** the provided environment had frontend packages linked into a shared C: dependency tree and a backend `node_modules` junction. Vite's Windows realpath subprocess and Node's default test-file worker spawning returned `EPERM`. Backend Node tests are configured for same-process test isolation and direct execution for the config test; frontend install was attempted on D: to remove the dependency junction, but D: ran out of space. The new CI executes clean installs/tests on Ubuntu. Local Windows browser results are recorded separately in the final report: no such failure is suppressed as a pass.
+6. **Windows EPERM and standalone static assets:** Vite's Windows realpath subprocess and Node's default test-file worker spawning returned `EPERM` inside the execution sandbox. Backend Node tests now use same-process test isolation; the frontend was installed and validated in an isolated same-drive checkout, and Playwright was run outside the sandbox. The first production-browser run exposed a separate deployment defect: Next standalone's `.next/static` files were not copied into its standalone runtime directory for `npm start`; client bundles returned 404 and the UI did not hydrate. Added `frontend/src/server/prepare-standalone.ts` to copy static/public assets during prestart. The corrected production build then passed all 19 browser tests. The Dockerfile already copies those directories in its runtime image.
 7. **Incomplete primary journeys (not changed in R1):** Buy Now currently calls the same `add` action as Add to bag and does not navigate to checkout. The customer has no standalone `/cart`, `/checkout`, or order detail URL; the cart and checkout are drawer states. Inquiry is a preview and does not submit to an inbox. Product URLs use `/product?id=…`. These are ranked in [`DEMO_ACCEPTANCE.md`](DEMO_ACCEPTANCE.md), not represented as payment or order acceptance.
 
 ## Route and test inventory
@@ -53,6 +53,48 @@ Backend API groups inspected in `backend/src/server.ts`:
 - API smoke evidence after the syntax correction: `GET /health` 200; `GET /ready` 200 with database connected; product list 200 with 100 sample rows; unknown product 404.
 - Backend strict TypeScript check passed. Runtime config tests passed 2/2; payment foundation tests 3/3; fulfillment guard tests 3/3; AI validation guard tests 4/4. PostgreSQL integration/auth/commerce suite passed 23/23 (0 failed, 0 skipped) on the isolated staging DB. Its initial run was 22/23 because the test expected CORS origin `http://localhost:3000` while the staging process used another origin; rerun with the test's expected origin passed all cases.
 - Docker CLI is installed but Docker Desktop's Linux engine is not available (`docker info` could not connect to its named pipe). Therefore compose image builds and compose health checks cannot be executed in this environment until the Docker daemon is available.
-- A frontend `npm ci` attempt to replace the shared dependency links on D: stopped with `ENOSPC`; the partial generated `frontend/node_modules` directory was removed after verifying it was a normal in-workspace directory, freeing space. This did not touch source files. Frontend production-build and browser test evidence is pending a same-drive clean validation checkout with sufficient free space.
+- A frontend `npm ci` attempt to replace the shared dependency links on D: stopped with `ENOSPC`; the partial generated `frontend/node_modules` directory was removed after verifying it was a normal in-workspace directory, freeing space. This did not touch source files. A separate C: validation checkout completed frontend `npm ci`, typecheck, production build, unit/catalogue tests and browser tests. Vitest and Playwright worker spawning require execution outside this Windows sandbox; the tests were rerun there rather than reported as passing from the failed sandbox attempts.
+- Frontend typecheck passed; Vitest passed 8/8; Node catalogue checks passed 3/3; production build passed. Initial E2E run failed 11/19 due to missing standalone static assets (and therefore no React hydration); after correcting standalone preparation, Playwright passed 19/19 against the production standalone server and the local PostgreSQL-backed API. E2E artifacts (mobile screenshots and failure traces from the diagnostic run) are in the ignored `frontend/test-results/` directory of the isolated validation checkout. No failed test was counted as passing; the initial failures drove the fix and the complete rerun.
+- Review screenshots were captured from the corrected production build: [`recovery-home-desktop.png`](screenshots/recovery-home-desktop.png) and [`recovery-collections-mobile.png`](screenshots/recovery-collections-mobile.png).
+- Local staging smoke checks: API `/health` 200 and `/ready` 200 with PostgreSQL connected; frontend `/api/health` 200 and `/api/ready` 200 with API and database connected; frontend routes and 100 sample catalogue records passed browser/API assertions; unknown product returned 404. The app was served from the production standalone build on loopback, not the development server.
 - No Vercel deployment credentials/domain or hosted staging URL were provided to this workspace. A hosted deployment and remote web-to-API verification cannot be claimed. Local staging verification is distinct from hosted acceptance.
 - Existing ignored local environment files were not printed or committed. No production credentials were copied into the demo environment. Rotate any OAuth secret previously shared in chat before production use.
+
+## Reproducible verification record
+
+The following checks were executed on the recovery branch. Frontend commands ran
+in a clean isolated C: validation checkout because the D: workspace ran out of
+space for a second dependency tree. Backend staging ran against the isolated
+loopback PostgreSQL database, not merchant/production data.
+
+| Command / check | Result |
+|---|---|
+| `npm run typecheck` (backend) | PASS |
+| `npm run test:runtime-config` | PASS, 2/2 |
+| `npm run test:payments` | PASS, 3/3 domain guard tests; not a gateway integration |
+| `npm run test:fulfillment` | PASS, 3/3 policy tests; not a live logistics integration |
+| `npm run test:ai-imagery` | PASS, 4/4 validation tests; no AI provider integration |
+| `npm run test:integration` | PASS, 23/23; PostgreSQL migrations, sample seed, auth/security/commerce integration |
+| `npm run typecheck` (frontend) | PASS |
+| `npm test` (frontend Vitest) | PASS, 8/8 |
+| `npm run test:node` (frontend catalogue/media) | PASS, 3/3 |
+| `npm run build` (frontend production) | PASS |
+| `npm run test:e2e` with `PLAYWRIGHT_BASE_URL=http://127.0.0.1:13101` and `TEST_API_URL=http://127.0.0.1:14100` | PASS, 19/19 against the production standalone web server and PostgreSQL-backed API |
+| HTTP smoke: backend `/ready`, frontend `/api/ready` | PASS, both 200 and database dependency connected |
+| `docker info` | BLOCKED: Docker Desktop Linux engine unavailable; Compose image/health verification not run |
+
+The first Playwright run against the production server failed 11/19 because
+standalone startup did not include Next static bundles. The errors included
+client chunk 404/MIME failures and missing interactions. After adding the
+standalone preparation step, the full 19-test rerun passed. The initial failure
+is retained here as defect evidence, not counted as a passing test. Browser
+workers raised `EPERM` inside the Windows sandbox; execution outside the
+sandbox passed. A separate attempt to use the CI default port 3100 could not
+start because another process already owned that port; the full verified run
+used an explicit unused loopback port.
+
+**R0 result:** PASS for merged-main audit and baseline reconciliation.
+**R1 result:** PASS for local staging only: frontend, TypeScript API and
+PostgreSQL communicate, and the core browser routes pass. Hosted/containerized
+staging remains BLOCKED pending an available Docker engine and staging hosting
+URL/credentials. Phase 4–8 production acceptance remains blocked independently.

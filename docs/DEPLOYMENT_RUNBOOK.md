@@ -84,7 +84,7 @@ The backend defaults to `127.0.0.1` for local development. For production it ref
 
 ## Windows Playwright notes
 
-Run from a clean checkout with `npm ci` in `frontend/` so package resolution is local to the checkout drive; do not use the shared `node_modules` junction used by the original desktop preview. Ensure the API is already running and `/ready` passes before `npm run test:e2e`. The Playwright `webServer` waits for frontend `/api/ready`, uses one worker, and stores screenshots/traces under ignored `frontend/test-results/` without overwriting committed evidence. If Windows process creation is denied by the execution sandbox, run the same lockfile workflow in CI; report that as an environment limitation, not a passing local E2E run.
+Run from a clean checkout with `npm ci` in `frontend/` so package resolution is local to the checkout drive; do not use the shared `node_modules` junction used by the original desktop preview. Ensure the API is already running and `/ready` passes before `npm run test:e2e`. The Playwright `webServer` waits for frontend `/api/ready`, uses one worker, and stores screenshots/traces under ignored `frontend/test-results/` without overwriting committed evidence. `npm run start` validates environment configuration and prepares Next standalone static/public assets before starting `server.js`. On Windows, this environment returned `EPERM` when sandboxed Vitest/Playwright tried to spawn worker processes; those same checks passed when executed outside the sandbox. Do not convert a sandbox worker error into a test pass: rerun outside that sandbox or use CI and record which environment produced the evidence.
 
 ## Rollback and secrets
 

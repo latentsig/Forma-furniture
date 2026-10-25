@@ -33,17 +33,19 @@
 
 ## Demo acceptance checklist
 
-- [ ] Frontend `/api/health` returns web liveness.
-- [ ] Frontend `/api/ready` returns ready only when the API and PostgreSQL are connected.
-- [ ] Backend `/health` and `/ready` return expected liveness/readiness results.
-- [ ] `/`, `/collections`, valid/invalid `/product?id=…`, `/spaces`, `/craft`, `/journal`, `/visit`, `/account`, `/admin`, `/admin/setup` and `/admin/accept-invite` render or return the documented status.
-- [ ] The collection API response contains the expected 100 demo records; all records remain sample-labelled.
-- [ ] Product images and product gallery images return successfully; no broken image or horizontal overflow is found at the tested viewport widths.
-- [ ] Browser cart actions use server cart state and preserve it after refresh.
-- [ ] Admin and customer API writes reject cross-origin mutations; protected admin operations enforce role checks.
-- [ ] COD and payment remain disabled. No live order, payment, production stock or merchant approval is claimed from this demo.
-- [ ] CI is green and actual browser test counts/failures are reported.
+- [x] Frontend `/api/health` returns web liveness (HTTP 200).
+- [x] Frontend `/api/ready` returns ready only when the API and PostgreSQL are connected (HTTP 200 with both dependencies connected).
+- [x] Backend `/health` and `/ready` return expected liveness/readiness results (HTTP 200; database connected).
+- [x] `/`, `/collections`, valid/invalid `/product?id=…`, `/spaces`, `/craft`, `/journal`, `/visit`, `/account`, `/admin`, `/admin/setup` and `/admin/accept-invite` render or return the documented status (Playwright).
+- [x] The collection API response contains the expected 100 demo records; all records remain sample-labelled.
+- [x] Product images and product gallery images return successfully; no broken image or horizontal overflow was found at 320, 390, 480, 768 and 1280px widths.
+- [x] Browser cart actions use server cart state and preserve it after refresh; checkout remains gated and does not place a real order.
+- [x] Admin and customer API writes reject cross-origin mutations; protected admin operations enforce role checks.
+- [x] COD and payment remain disabled. No live order, payment, production stock or merchant approval is claimed from this demo.
+- [ ] CI is green. Workflow is committed but has not run on GitHub; local results are backend integration 23/23, frontend Vitest 8/8, Node catalogue 3/3 and Playwright 19/19.
 
 ## Acceptance evidence
 
 Record the environment, commit SHA, exact commands, service responses, browser test totals and screenshots in `docs/PHASE_STATUS.md`. A local staging pass is not a hosted staging pass; hosted staging is pending a reachable staging URL and provider configuration. Production acceptance remains a separate merchant/DevOps sign-off.
+
+Local staging screenshots: [`recovery-home-desktop.png`](screenshots/recovery-home-desktop.png) and [`recovery-collections-mobile.png`](screenshots/recovery-collections-mobile.png). These show the production standalone build with React hydration and local sample catalogue data.

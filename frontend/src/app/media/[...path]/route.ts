@@ -15,7 +15,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pat
     if (path.length < 2 || path[0] !== 'image assets' || path.some((segment) => !segment || segment === '.' || segment === '..' || segment.includes('\\') || segment.includes('/'))) {
       return new Response('Not found', { status: 404 });
     }
-    const root = await realpath(process.env.FORMA_ASSET_ROOT ?? resolve(process.cwd(), 'public', 'image assets'));
+    const root = await realpath(/*turbopackIgnore: true*/ process.env.FORMA_ASSET_ROOT ?? resolve(process.cwd(), 'public', 'image assets'));
     const candidate = resolve(root, ...path.slice(1));
     const rel = relative(root, candidate);
     if (!rel || rel.startsWith('..') || isAbsolute(rel)) return new Response('Not found', { status: 404 });

@@ -732,9 +732,9 @@ audit.
 
 ## Recovery R1 — local/staging deployment reliability
 
-**Status:** IN PROGRESS pending frontend production-build/route/browser evidence
-and container/hosted staging evidence. Do not use this status as production
-acceptance or as permission to start payment/AI implementation.
+**Status:** PASS for local staging acceptance; BLOCKED for containerized and
+hosted staging acceptance. This is not production acceptance and does not
+authorize payment/AI activation.
 
 **Implemented on `recovery/r0-r1-staging`:**
 
@@ -750,6 +750,9 @@ acceptance or as permission to start payment/AI implementation.
 - Added Node 24 multi-stage Dockerfiles, isolated PostgreSQL 16 Compose staging
   with one-off migrations/sample seed, CI with a disposable PostgreSQL service,
   and the deployment/demo/recovery documents.
+- Added a TypeScript standalone preparation step to copy Next.js static bundles
+  and public assets into the standalone runtime before startup. This fixed a
+  production-only no-hydration defect that the first browser run exposed.
 - Browser screenshot outputs now go to ignored Playwright test artifacts rather
   than overwriting committed historical evidence. Playwright waits for the
   composed readiness endpoint.
@@ -761,12 +764,19 @@ samples. A running API on loopback returned `/health` 200, `/ready` 200 with
 database connected, 100 catalogue rows, and 404 for an unknown product. The
 backend typecheck passed; runtime config passed 2/2, payment 3/3, fulfillment
 3/3, AI guard 4/4, and the PostgreSQL integration suite passed 23/23 (0 failed,
-0 skipped) after matching the existing test's configured CORS origin. See
-[`RECOVERY_AUDIT.md`](RECOVERY_AUDIT.md) for command/tool constraints.
+0 skipped) after matching the existing test's configured CORS origin. Frontend
+typecheck and production build passed; Vitest passed 8/8 and Node catalogue
+checks 3/3. The first production browser run exposed missing standalone assets;
+after the fix, Playwright passed 19/19 against the production standalone server
+and PostgreSQL-backed API. Screenshots and diagnostic traces are under ignored
+`frontend/test-results/` in the isolated C: validation checkout. Local frontend
+`/api/ready` and backend `/ready` returned 200 with the database connected.
+Review screenshots: [`recovery-home-desktop.png`](screenshots/recovery-home-desktop.png)
+and [`recovery-collections-mobile.png`](screenshots/recovery-collections-mobile.png).
+See [`RECOVERY_AUDIT.md`](RECOVERY_AUDIT.md) for full evidence and constraints.
 
-**Remaining R1 gates:** production frontend build and browser smoke against the
-staging API/database; Docker Compose build/health verification (Docker daemon is
-not available in the current environment); and a hosted staging URL (no Vercel
-or API hosting credentials/domain were provided). Until these are evidenced,
-R1 cannot receive a hosted-staging PASS. No payment, COD, AI or production
-acceptance has been enabled.
+**Remaining deployment gates:** Docker Compose build/health verification
+(Docker daemon is not available in the current environment) and a hosted staging
+URL (no Vercel or API hosting credentials/domain were provided). Local staging
+acceptance is verified; hosted staging and production acceptance are not.
+No payment, COD, AI or production acceptance has been enabled.

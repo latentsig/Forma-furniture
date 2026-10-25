@@ -15,12 +15,14 @@ export default defineConfig({
     ...devices['Desktop Chrome'],
   },
   webServer: process.env.PLAYWRIGHT_BASE_URL ? undefined : {
-    command: 'npm run start -- --hostname 127.0.0.1 --port 3100',
+    command: 'npm run start',
     url: 'http://127.0.0.1:3100/api/ready',
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
     env: {
       FORMA_ASSET_ROOT: resolve(process.cwd(), 'public', 'image assets'),
+      HOSTNAME: '127.0.0.1',
+      PORT: '3100',
     },
   },
 });
