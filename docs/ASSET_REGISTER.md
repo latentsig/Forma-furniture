@@ -1,6 +1,6 @@
 # Forma Furniture — Asset Register
 
-**Audit date:** 2026-10-25. Inventory covers every file in `image assets/` on `phase-0-audit` at baseline commit `9de73621251d2c932490401f5407525280b76d0e`.
+**Audit date:** 2026-10-25. Inventory covers every file in `image assets/` on `phase-0-audit` at baseline commit `9de73621251d2c932490401f5407525280b76d0e`. In Phase 2, the preserved files moved to `frontend/public/image assets/`; table filenames below are relative to that directory.
 
 ## Summary
 
@@ -11,7 +11,7 @@
 - Static HTML/CSS references checked: 146; missing paths: 0. This is a path/integrity check, not a full visual or rights review.
 - 13 files exceed 1 MiB. Original source files are retained; no compression or format conversion was performed.
 - README states that the catalog's primary and alternate images were AI-generated for the demo. Provenance, license, approvals and factual correspondence to real sellable SKUs are not encoded in the repository and remain unverified. Treat approval status as **unknown** for every asset until the owner supplies evidence.
-- All generated variants and originals remain in `image assets/`. Catalog file names follow `forma-seat-001..025`, `forma-table-026..050`, `forma-bedroom-051..075`, and `forma-storage-076..100`, each with `.jpg`, `-side.jpg` and `-rear.jpg` views.
+- All generated variants and originals remain unchanged in `frontend/public/image assets/`. Catalog file names follow `forma-seat-001..025`, `forma-table-026..050`, `forma-bedroom-051..075`, and `forma-storage-076..100`, each with `.jpg`, `-side.jpg` and `-rear.jpg` views.
 
 ## Oversized files (>1 MiB)
 

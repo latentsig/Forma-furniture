@@ -5,6 +5,19 @@ source is `.ts` and `.tsx`; use TypeScript-based styles and do not add standalon
 `.js`, `.css` or `.html` source files. The browser will necessarily receive
 compiled JavaScript and rendered HTML at runtime.
 
-The current static storefront remains at the repository root until its pages,
-catalogue, imagery, galleries, zoom, search, filters and cart behavior have
-been migrated and verified against regression checks.
+The TypeScript storefront replaces the former root static pages. The original
+image files remain unchanged under `public/image assets`.
+
+## Run the storefront
+
+Use Node.js 20.9 or later:
+
+```text
+npm install
+npm run dev
+```
+
+The Next.js app serves its unchanged furniture imagery from `public/image assets`
+through a TypeScript route that validates paths and only returns raster formats.
+`npm test` runs the Vitest unit suite; `npm run test:node` runs the media/catalog
+checks with Node's built-in runner.

@@ -1,4 +1,11 @@
-window.formaCatalog = [
+export type Category = 'Seating' | 'Tables' | 'Bedroom' | 'Storage';
+
+export type Product = {
+  id: string; name: string; category: Category; price: number; material: string;
+  description: string; image: string; size: string; lead: string; gallery: string[];
+};
+
+export const products = [
   {
     "id": "forma-001-sunday-oak-lounge-chair",
     "name": "Sunday Oak Lounge Chair",
@@ -1599,4 +1606,4 @@ window.formaCatalog = [
       "image%20assets/forma-storage-100-rear.jpg"
     ]
   }
-];
+] as Product[];

@@ -1,0 +1,10 @@
+{
+  "name": "forma-furniture-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch server.ts",
+    "start": "node server.ts"
+  },
+  "engines": { "node": ">=22.18" }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "forma-furniture-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:node": "node --experimental-strip-types src/catalog.node.test.ts",
+    "test:vitest": "vitest run"
+  },
+  "dependencies": {
+    "next": "16.3.8",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.2"
+  }
+}
