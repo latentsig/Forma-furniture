@@ -1,0 +1,1 @@
+ALTER TABLE "admin_password_reset_tokens" ADD COLUMN "recovery_totp_secret_encrypted" varchar(256);
