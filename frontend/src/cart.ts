@@ -13,7 +13,7 @@ function parseArray(value: string | null): unknown[] | null {
   }
 }
 
-export function parseCartStorage(currentValue: string | null, legacyValue: string | null): CartLine[] {
+export function parseCartStorage(currentValue: string | null, legacyValue: string | null, productIds = knownProductIds): CartLine[] {
   const entries = parseArray(currentValue) ?? parseArray(legacyValue) ?? [];
   const quantities = new Map<string, number>();
   for (const entry of entries) {
@@ -21,7 +21,7 @@ export function parseCartStorage(currentValue: string | null, legacyValue: strin
     const candidate = entry as { productId?: unknown; id?: unknown; quantity?: unknown };
     const productId = typeof candidate.productId === 'string' ? candidate.productId : candidate.id;
     const quantity = candidate.quantity;
-    if (typeof productId !== 'string' || !knownProductIds.has(productId)) continue;
+    if (typeof productId !== 'string' || !productIds.has(productId)) continue;
     if (typeof quantity !== 'number' || !Number.isInteger(quantity) || quantity < 1 || quantity > 99) continue;
     quantities.set(productId, Math.min(99, (quantities.get(productId) ?? 0) + quantity));
   }

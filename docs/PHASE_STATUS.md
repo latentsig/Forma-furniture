@@ -145,10 +145,9 @@ data) only. Do not skip ahead to later phases.
 
 ## Phase 3 — Backend, PostgreSQL and product data
 
-**Status:** IN PROGRESS — a real PostgreSQL-backed typed product API, migration,
-transactional seed and integration suite have been implemented and verified.
-The Next.js storefront still reads the Phase 2 typed catalogue directly; wiring
-storefront reads to this API is the next Phase 3 task.
+**Status:** PASS — PostgreSQL catalog reads are integrated into the storefront,
+with explicit service failure states, operational migration guidance and
+combined browser/API verification.
 
 **Branch:** `phase-3-backend-postgres`, created from Phase 2 commit `da705da`.
 
@@ -172,6 +171,16 @@ environment example under `backend/`; `.env.local` is ignored and untracked.
 - Queries use parameterized Drizzle expressions; invalid categories, sort,
   search length and page bounds return 400. Cross-origin calls must match the
   configured exact `FRONTEND_ORIGIN`.
+- The Next.js server fetches all catalog pages through the API, validates every
+  response field and detects incomplete/duplicate pages. Homepage cards,
+  collection filtering/search/sorting, product details/gallery, and bag display
+  use the database-backed records. Product detail also resolves directly by ID
+  from the API. Catalog outage or malformed data has a visible unavailable
+  state; the static catalog is not used as a runtime product fallback.
+- API prices are stored/transported as integer paise and converted to rupees for
+  display. The existing catalogue image paths and gallery behavior are retained.
+- Added local/hosted PostgreSQL setup, least-privilege/TLS configuration,
+  release-time migration, backup/restore and seed safety guidance.
 
 **Checks actually run:**
 
@@ -188,6 +197,20 @@ environment example under `backend/`; `.env.local` is ignored and untracked.
   `connected`, and the product endpoint returned total 100 with the requested
   two-row page.
 - Runtime dependency audit: `npm audit --omit=dev` reported 0 vulnerabilities.
+- Frontend `npm run typecheck`: passed; backend `npm run typecheck`: passed.
+- Frontend `npm test -- --run` (Vitest): 4 passed, 0 failed, 0 skipped.
+- Frontend `npm run test:node`: 3 passed, 0 failed, 0 skipped.
+- Next.js production build (Webpack): passed; 10 dynamic app/API routes built.
+- Playwright against the fresh Phase 3 production server and live PostgreSQL API:
+  12 passed, 0 failed, 0 skipped. Includes 320/390/480/768/1280px collection
+  overflow, 320/390px homepage, mobile navigation, category/search/sort,
+  gallery/zoom, bag/preview checkout, legacy redirects, all routes, invalid IDs
+  and API-to-storefront identity/price/image checks.
+- An initial Playwright attempt reused a pre-existing Phase 2 process on port
+  3100 (6 passed, 6 failed against stale output). It was not treated as current
+  source verification; the server was isolated on port 3102 and the full suite
+  then passed 12/12.
+- `git diff --check`: passed.
 
 **Database / secrets:** the existing local PostgreSQL service on port 5432 was
 left untouched because its credentials are not available. An isolated
@@ -199,13 +222,23 @@ development data, not a production database or deployment configuration.
 **Security / compatibility:** API binds to `127.0.0.1` by default and sends
 `nosniff`, no-store and referrer-policy headers. Product facts remain
 `sample`; no merchant-approved content, inventory, cart, orders, authentication
-or payment flows are claimed. The storefront has not yet been switched to read
-these records from the API.
+or payment flows are claimed. The frontend server-side API origin is not
+browser-exposed. Production database, domain, TLS and deployment credentials
+have not been supplied, so production deployment has not been performed. No
+merchant content or image-rights approvals were fabricated.
 
-**Remaining Phase 3 work:** connect Next.js catalog/detail reads to the backend
-API with visible loading/error behavior; add combined browser/database checks;
-document deployment database configuration and operational migration procedure.
-Merchant approval of product facts remains required before production
-publication.
+**Verification evidence:** `docs/screenshots/phase3-collection-320.png`,
+`phase3-collection-390.png` and `phase3-home-390.png`, captured from the fresh
+production build at 320×844 and 390×844 CSS pixels. Phase 2 screenshots were
+preserved unchanged. Preview: `http://127.0.0.1:3102/`.
 
-**Next phase allowed:** NO — Phase 3 is in progress; do not start Phase 4.
+**Remaining limitations:** this phase provides product reads only. Product
+facts/images still need merchant approval before production publication. There
+is no production database/deployment configuration, inventory, authentication,
+customer cart persistence, order recording or payment support; these remain
+later scoped phases. Those external merchant/deployment details are not needed
+to pass the local Phase 3 acceptance criteria.
+
+**Next phase allowed:** YES — Phase 3 acceptance criteria are complete. Phase 4
+(authentication, admin dashboard and RBAC) may begin when explicitly requested;
+do not skip phases or imply those capabilities exist yet.

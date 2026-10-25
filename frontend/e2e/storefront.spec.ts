@@ -19,7 +19,7 @@ test.describe('responsive storefront', () => {
       expect(dimensions.body, JSON.stringify(dimensions)).toBeLessThanOrEqual(width);
       if (width === 320 || width === 390) {
         await page.screenshot({
-          path: resolve(process.cwd(), '..', 'docs', 'screenshots', `phase2-collection-${width}.png`),
+          path: resolve(process.cwd(), '..', 'docs', 'screenshots', `phase3-collection-${width}.png`),
         });
       }
     });
@@ -51,13 +51,26 @@ test.describe('responsive storefront', () => {
       expect(dimensions.document, JSON.stringify(dimensions)).toBeLessThanOrEqual(width);
       expect(dimensions.body, JSON.stringify(dimensions)).toBeLessThanOrEqual(width);
       if (width === 390) {
-        await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase2-home-390.png') });
+        await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase3-home-390.png') });
       }
     }
   });
 });
 
 test.describe('catalogue and shopping demo', () => {
+  test('storefront renders records and paise prices from the PostgreSQL catalog API', async ({ page, request }) => {
+    const api = await request.get('http://127.0.0.1:4100/api/products?sort=featured&limit=100&offset=0');
+    expect(api.status()).toBe(200);
+    const pageData = await api.json() as { items: Array<{ id: string; name: string; pricePaise: number; image: string }>; total: number };
+    expect(pageData.total).toBe(100);
+    expect(pageData.items).toHaveLength(100);
+    const first = pageData.items[0];
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: first.name })).toBeVisible();
+    await expect(page.locator('.product-price').first()).toContainText(new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(first.pricePaise / 100));
+    await expect(page.locator('.product-image img').first()).toHaveAttribute('src', `/media/${first.image}`);
+  });
+
   test('search, category filter, sorting and empty state work', async ({ page }) => {
     await page.goto('/collections');
     await page.getByRole('button', { name: /^Seating/ }).click();

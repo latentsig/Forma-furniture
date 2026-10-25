@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { CartProvider, SiteFooter, SiteHeader } from '@/components/storefront';
+import { getCatalog } from '@/catalog-api';
+import type { Product } from '@/catalog';
 
 export const metadata: Metadata = {
   title: { default: 'Forma — Furniture for the everyday', template: '%s — Forma' },
@@ -8,12 +10,18 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000')
 };
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+export const dynamic = 'force-dynamic';
+
+export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+  let catalog: Product[] = [];
+  let catalogError = false;
+  try { catalog = await getCatalog(); } catch { catalogError = true; }
   return (
     <html lang="en">
       <body>
-        <CartProvider>
+        <CartProvider products={catalog}>
           <SiteHeader />
+          {catalogError && <div className="notice" role="status" style={{ margin: 0, textAlign: 'center' }}>Product data is temporarily unavailable. Please try again shortly.</div>}
           {children}
           <SiteFooter />
         </CartProvider>

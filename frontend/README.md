@@ -1,37 +1,41 @@
 # Forma Furniture frontend
 
-The Next.js, React and TypeScript storefront will live here. Authored application
-source is `.ts` and `.tsx`; use TypeScript-based styles and do not add standalone
-`.js`, `.css` or `.html` source files. The browser will necessarily receive
-compiled JavaScript and rendered HTML at runtime.
+Next.js App Router storefront authored in TypeScript/TSX. Browser product
+catalogue, detail and bag data come from the Phase 3 Node.js commerce API backed
+by PostgreSQL. Product prices arrive in integer paise and display in rupees.
+The local bag remains preview-only and does not create an order.
 
-The TypeScript storefront replaces the former root static pages. The original
-image files remain unchanged under `public/image assets`.
+The Next.js server reads the internal API with `no-store`. Set `FORMA_API_URL`
+to the backend origin on the frontend server (default
+`http://127.0.0.1:4100`). Keep this as a server variable, never a
+`NEXT_PUBLIC_*` value. Catalog data failures produce an explicit unavailable
+message rather than falling back to stale product data. The unchanged original
+image files remain in `public/image assets` and are delivered through the typed
+media route.
 
-## Run the storefront
+## Run locally
 
-Use Node.js 20.9 or later:
+Use Node.js 22.18 or later. First follow `backend/README.md` to configure
+PostgreSQL, apply migrations, seed the sample catalogue, and start the API.
+Then run the frontend:
 
 ```text
-npm install
+npm ci
 npm run dev
 ```
 
-The Next.js app serves its unchanged furniture imagery from `public/image assets`
-through a TypeScript route that validates paths and only returns raster formats.
-`npm test` runs the Vitest unit suite; `npm run test:node` runs the media/catalog
-checks with Node's built-in runner.
+## Checks
 
-## Verification
+- `npm run typecheck` — strict frontend TypeScript check.
+- `npm test` — Vitest unit tests.
+- `npm run test:node` — typed catalogue and media checks.
+- `npm run build` — optimized production build.
+- `npm run test:e2e` — Playwright browser tests against a production build and
+  the seeded API at `http://127.0.0.1:4100`. It verifies API product IDs, names,
+  paise-to-rupee prices and images in the rendered storefront. Screenshots are
+  saved under `../docs/screenshots/`.
 
-- `npm run typecheck` checks the frontend TypeScript source.
-- `npm test` runs the Vitest unit suite.
-- `npm run test:node` checks the typed catalogue and media route.
-- `npm run build` creates the production build.
-- `npm run test:e2e` runs Playwright against the production build and writes the
-  320px and 390px collection plus 390px home screenshots under
-  `../docs/screenshots/`. Install Chromium with `npx playwright install chromium`
-  if the browser is not already present.
-
-Playwright starts a local server on port 3100 by default. Set
-`PLAYWRIGHT_BASE_URL` to test an already-running local preview instead.
+Playwright normally starts the production frontend on port 3100. If a local
+preview is already running elsewhere, set `PLAYWRIGHT_BASE_URL` to its origin.
+The backend and PostgreSQL must be available for catalog routes and browser
+tests.

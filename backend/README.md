@@ -38,6 +38,41 @@ Queries use parameterized Drizzle expressions. Invalid filters/page bounds are
 unless their exact origin matches `FRONTEND_ORIGIN` (default
 `http://localhost:3000`). No write/order/payment endpoint exists in this phase.
 
+## Deployment and database operations
+
+Provision PostgreSQL 16+ through the deployment provider before starting the
+API. Supply `DATABASE_URL` through the host secret manager (never commit it).
+Use a dedicated least-privilege application role and require TLS for remote
+connections. Set `FRONTEND_ORIGIN` to the exact deployed storefront origin and
+`PORT` to the platform-provided port. Put the API on a private network where
+possible; if it is internet-facing, terminate TLS at the platform proxy and
+apply platform rate limits. `GET /ready` is the readiness probe; `/health` is
+process liveness only.
+
+Apply migrations as a one-off release step, before starting the new API build:
+
+```text
+npm ci
+npm run db:migrate
+npm run typecheck
+npm start
+```
+
+Do not run schema migrations automatically from every web worker at startup.
+Drizzle migrations are forward-only here: take a provider-managed snapshot
+before a production migration, review the generated SQL, and prepare a new
+forward migration to correct a bad change. Verify the migration journal and
+`GET /ready` after rollout. Use the provider's documented point-in-time restore
+procedure for disaster recovery; periodically test restores in a separate
+database. `npm run db:seed` is only for demo/development catalog data and must
+not be run against production merchant records. The migration chain currently
+creates the product table; no production records or backups exist in this repo.
+
+The frontend server must be configured with `FORMA_API_URL` pointing to the
+internal API origin. The Next.js server makes no-store server-side API reads;
+the API origin need not be public to browsers. Do not expose database URLs or
+credentials through `NEXT_PUBLIC_*` variables.
+
 ## Checks
 
 - `npm run typecheck`

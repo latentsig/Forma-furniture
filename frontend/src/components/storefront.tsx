@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { products, type Category, type Product } from '@/catalog';
+import { type Category, type Product } from '@/catalog';
 import { parseCartStorage } from '@/cart';
 
 type CartLine = { productId: string; quantity: number };
@@ -12,12 +12,12 @@ const CartContext = createContext<CartContextValue | null>(null);
 const categories: Array<'All pieces' | Category> = ['All pieces', 'Seating', 'Tables', 'Bedroom', 'Storage'];
 const navLinks = [{ href: '/', label: 'Home' }, { href: '/collections', label: 'Collection' }, { href: '/spaces', label: 'Spaces' }, { href: '/craft', label: 'Craft' }, { href: '/journal', label: 'Journal' }, { href: '/visit', label: 'Visit' }];
 
-export function CartProvider({ children }: { children: ReactNode }) {
+export function CartProvider({ children, products }: { children: ReactNode; products: Product[] }) {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    setLines(parseCartStorage(localStorage.getItem('forma-demo-cart-v2'), localStorage.getItem('forma-demo-bag')));
+    setLines(parseCartStorage(localStorage.getItem('forma-demo-cart-v2'), localStorage.getItem('forma-demo-bag'), new Set(products.map((product) => product.id))));
     setReady(true);
   }, []);
   useEffect(() => { if (ready) localStorage.setItem('forma-demo-cart-v2', JSON.stringify(lines)); }, [lines, ready]);
@@ -29,10 +29,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return current.map((line) => line.productId === productId ? { ...line, quantity: Math.min(99, line.quantity + 1) } : line);
     });
     setIsOpen(true);
-  }, []);
+  }, [products]);
   const setQuantity = useCallback((productId: string, quantity: number) => setLines((current) => quantity < 1 ? current.filter((line) => line.productId !== productId) : current.map((line) => line.productId === productId ? { ...line, quantity: Math.min(99, quantity) } : line)), []);
   const value = useMemo(() => ({ lines, count: lines.reduce((sum, line) => sum + line.quantity, 0), add, setQuantity, clear: () => setLines([]), open: () => setIsOpen(true) }), [lines, add, setQuantity]);
-  return <CartContext.Provider value={value}>{children}{isOpen && <CartDrawer close={() => setIsOpen(false)} />}</CartContext.Provider>;
+  return <CartContext.Provider value={value}>{children}{isOpen && <CartDrawer products={products} close={() => setIsOpen(false)} />}</CartContext.Provider>;
 }
 
 export function useCart() {
@@ -65,7 +65,7 @@ export function SiteFooter() {
   return <footer className="site-footer"><span>FORMA · FURNITURE FOR THE EVERYDAY</span><nav aria-label="Footer">{navLinks.slice(1).map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}</nav><span>Catalogue demo · no orders are recorded</span></footer>;
 }
 
-function CartDrawer({ close }: { close: () => void }) {
+function CartDrawer({ products, close }: { products: Product[]; close: () => void }) {
   const { lines, setQuantity, clear } = useCart();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const entries = lines.flatMap((line) => {
@@ -98,11 +98,11 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
   return <article className="product-card"><Link className="product-image" href={`/product?id=${encodeURIComponent(product.id)}`}><img src={asset(product.image)} alt={`${product.name}, ${product.category.toLowerCase()} furniture`} loading="lazy"/><span className="product-index">FORMA / {String(index + 1).padStart(3, '0')}</span></Link><p className="product-category">{product.category}</p><h2 className="product-name"><Link href={`/product?id=${encodeURIComponent(product.id)}`}>{product.name}</Link></h2><div className="product-info"><span>{product.material}</span><span className="product-price">{formatRupees(product.price)}</span></div><button className="add-button" type="button" onClick={() => add(product.id)}>Add to bag +</button></article>;
 }
 
-export function ProductGrid({ items }: { items: Product[] }) {
-  return <div className="product-grid">{items.map((product) => <ProductCard key={product.id} product={product} index={products.findIndex((item) => item.id === product.id)} />)}</div>;
+export function ProductGrid({ items, catalog = items }: { items: Product[]; catalog?: Product[] }) {
+  return <div className="product-grid">{items.map((product, index) => { const catalogIndex = catalog.findIndex((item) => item.id === product.id); return <ProductCard key={product.id} product={product} index={catalogIndex >= 0 ? catalogIndex : index} />; })}</div>;
 }
 
-export function CollectionsBrowser() {
+export function CollectionsBrowser({ products }: { products: Product[] }) {
   const [category, setCategory] = useState<(typeof categories)[number]>('All pieces');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('featured');
@@ -113,12 +113,12 @@ export function CollectionsBrowser() {
     if (sort === 'price-high') result.sort((a, b) => b.price - a.price);
     if (sort === 'name') result.sort((a, b) => a.name.localeCompare(b.name));
     return result;
-  }, [category, query, sort]);
+  }, [category, query, sort, products]);
   return <>
     <nav className="category-list" aria-label="Filter by category">{categories.map((item) => <button key={item} type="button" aria-pressed={category === item} onClick={() => setCategory(item)}>{item}<span className="category-count">&nbsp; {item === 'All pieces' ? products.length : products.filter((product) => product.category === item).length}</span></button>)}</nav>
     <div className="collection-tools"><label><span className="filter-label">Search the collection</span><input className="search-input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, material or category"/></label><label><span className="filter-label">Sort by</span><select className="sort-select" value={sort} onChange={(event) => setSort(event.target.value)}><option value="featured">Featured</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option><option value="name">Name</option></select></label></div>
     <p className="result-count" aria-live="polite">Showing {visible.length} {visible.length === 1 ? 'piece' : 'pieces'} · sample catalogue</p>
-    {visible.length ? <ProductGrid items={visible}/> : <p className="empty-state">Nothing found. Try another search.</p>}
+    {visible.length ? <ProductGrid items={visible} catalog={products}/> : <p className="empty-state">{products.length ? 'Nothing found. Try another search.' : 'The catalogue is temporarily unavailable. Please try again shortly.'}</p>}
   </>;
 }
 
