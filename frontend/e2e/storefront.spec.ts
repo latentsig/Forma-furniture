@@ -91,7 +91,7 @@ test.describe('catalogue and shopping demo', () => {
     expect(firstName.localeCompare(lastName)).toBeLessThanOrEqual(0);
   });
 
-  test('product gallery supports thumbnails, zoom controls and keyboard; bag and demo checkout behave clearly', async ({ page }) => {
+  test('product gallery supports zoom; server cart persists and checkout requires a customer account', async ({ page }) => {
     await page.goto(`/product?id=${productId}`);
     await expect(page.getByRole('heading', { name: 'Sunday Oak Lounge Chair' })).toBeVisible();
     await page.getByRole('button', { name: 'Show image 2' }).click();
@@ -104,18 +104,26 @@ test.describe('catalogue and shopping demo', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Add to demo bag +' }).click();
+    await page.locator('.detail-copy').getByRole('button', { name: 'Add to bag +' }).click();
     const bag = page.getByRole('dialog', { name: /Your bag/ });
     await expect(bag).toBeVisible();
-    await expect(bag).toContainText('storefront preview');
+    await expect(bag).toContainText('Final price, stock and delivery are checked by the store');
     await expect(bag).toContainText('Sunday Oak Lounge Chair');
-    await bag.getByRole('button', { name: 'View demo checkout' }).click();
-    const checkout = page.getByRole('alertdialog', { name: 'Demo only' });
-    await expect(checkout).toContainText('No purchase has been created');
-    await checkout.getByRole('button', { name: 'Return to bag' }).click();
+    await bag.getByRole('button', { name: 'Continue to checkout' }).click();
+    const checkout = page.getByRole('dialog', { name: 'Delivery & payment' });
+    await checkout.getByLabel('Full name').fill('Forma Test Customer');
+    await checkout.getByLabel('Phone').fill('+919876543210');
+    await checkout.getByLabel('Address line 1').fill('10 Test Road');
+    await checkout.getByLabel('City').fill('Bengaluru');
+    await checkout.getByLabel('State').fill('Karnataka');
+    await checkout.getByLabel('PIN code').fill('560001');
+    await checkout.getByRole('button', { name: 'Check delivery & total' }).click();
+    await expect(checkout).toContainText('Sign in to request delivery.');
+    await expect(checkout.getByRole('link', { name: 'Sign in to your account' })).toHaveAttribute('href', '/account');
+    await checkout.getByRole('button', { name: 'Close checkout' }).click();
     await bag.getByRole('button', { name: 'Close bag' }).click();
     await page.goto('/collections');
-    await page.getByRole('button', { name: /Open demo bag, 1 items/ }).click();
+    await page.getByRole('button', { name: /Open bag, 1 items/ }).click();
     await expect(page.getByRole('dialog', { name: /Your bag/ })).toContainText('Sunday Oak Lounge Chair');
   });
 
@@ -138,7 +146,7 @@ test.describe('catalogue and shopping demo', () => {
 });
 
 test('all storefront routes render and health endpoint is available', async ({ page, request }) => {
-  const routes = ['/', '/collections', `/product?id=${productId}`, '/spaces', '/craft', '/journal', '/visit'];
+  const routes = ['/', '/collections', `/product?id=${productId}`, '/spaces', '/craft', '/journal', '/visit', '/account'];
   const browserErrors: string[] = [];
   page.on('pageerror', (error) => browserErrors.push(error.message));
   page.on('console', (message) => {
@@ -157,4 +165,200 @@ test('all storefront routes render and health endpoint is available', async ({ p
   const missingProduct = await page.goto('/product?id=not-a-real-product');
   expect(missingProduct?.status()).toBe(404);
   await expect(page.getByRole('heading', { name: /We couldn’t find that piece/ })).toBeVisible();
+});
+
+test('admin tools require authentication and the browser proxy rejects cross-origin writes', async ({ page, request }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/admin');
+  await expect(page.getByRole('heading', { name: 'Administrator sign in' })).toBeVisible();
+  await expect(page.getByLabel('Authenticator code')).toBeVisible();
+  await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase4-admin-login-390.png') });
+
+  const unauthenticated = await request.get('/api/admin/products');
+  expect(unauthenticated.status()).toBe(401);
+  const csrf = await request.post('/api/admin/session', {
+    headers: { Origin: 'https://cross-origin.example' },
+    data: { email: 'owner@example.test', password: 'not-a-valid-password', totp: '000000' },
+  });
+  expect(csrf.status()).toBe(403);
+});
+
+test('administrator password recovery keeps MFA and consumes the reset link once', async ({ page }) => {
+  await page.route('**/api/admin/password-reset/request', (route) => route.fulfill({
+    status: 202,
+    contentType: 'application/json',
+    body: JSON.stringify({ message: 'If an active administrator account exists for that address, reset instructions have been sent.', previewUrl: `${new URL(route.request().url()).origin}/admin?reset=${'r'.repeat(43)}` }),
+  }));
+  let resetBody: unknown;
+  await page.route('**/api/admin/password-reset/complete', async (route) => {
+    resetBody = route.request().postDataJSON();
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'Password updated. Your authenticator is still required at sign-in.' }) });
+  });
+  await page.goto('/admin');
+  await page.getByRole('button', { name: 'Forgot password?' }).click();
+  await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible();
+  await page.getByRole('textbox', { name: 'Administrator email' }).fill('owner@example.test');
+  await page.getByRole('button', { name: 'Send reset link' }).click();
+  await expect(page.getByRole('link', { name: 'Open password reset' })).toBeVisible();
+  await page.getByRole('link', { name: 'Open password reset' }).click();
+  await expect(page.getByRole('heading', { name: 'Set a new administrator password' })).toBeVisible();
+  await expect(page.getByText(/authenticator remains required/)).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase4-admin-password-reset-390.png') });
+  await page.getByLabel('New password').fill('A-New-Strong-Password-4831');
+  await page.getByRole('button', { name: 'Update password' }).click();
+  await expect(page.getByRole('status')).toContainText(/authenticator is still required/i);
+  expect(resetBody).toEqual({ token: 'r'.repeat(43), password: 'A-New-Strong-Password-4831' });
+  await expect(page.getByLabel('Authenticator code')).toBeVisible();
+});
+
+test('lost authenticator recovery enrolls and verifies a replacement before restoring access', async ({ page }) => {
+  const token = 'm'.repeat(43);
+  const secret = 'JBSWY3DPEHPK3PXP';
+  await page.route('**/api/admin/access-recovery/request', (route) => route.fulfill({
+    status: 202,
+    contentType: 'application/json',
+    body: JSON.stringify({ message: 'If an active administrator account exists for that address, recovery instructions have been sent.', previewUrl: `${new URL(route.request().url()).origin}/admin?recover=${token}` }),
+  }));
+  await page.route('**/api/admin/access-recovery/prepare', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ email: 'owner@example.test', secret, otpauthUri: `otpauth://totp/Forma%20Furniture%3Aowner%40example.test?secret=${secret}&issuer=Forma%20Furniture&algorithm=SHA1&digits=6&period=30`, expiresInSeconds: 1800 }),
+  }));
+  let submitted: unknown;
+  await page.route('**/api/admin/access-recovery/complete', async (route) => {
+    submitted = route.request().postDataJSON();
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'Access recovered. Sign in using your new password and authenticator code.' }) });
+  });
+  await page.goto('/admin');
+  await page.getByRole('button', { name: 'Lost your authenticator?' }).click();
+  await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible();
+  await page.getByRole('textbox', { name: 'Administrator email' }).fill('owner@example.test');
+  await page.getByRole('button', { name: 'Send reset link' }).click();
+  await page.getByRole('link', { name: 'Open password reset' }).click();
+  await expect(page.getByRole('heading', { name: 'Recover administrator access' })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Private Forma Furniture replacement authenticator QR code' })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase4-admin-access-recovery-390.png') });
+  await page.getByLabel('New password').fill('Replacement-Admin-Password-8402');
+  await page.getByLabel('Current six-digit authenticator code').fill('123456');
+  await page.getByRole('button', { name: 'Verify and recover access' }).click();
+  await expect(page.getByRole('status')).toContainText(/new password and authenticator/i);
+  expect(submitted).toEqual({ token, password: 'Replacement-Admin-Password-8402', totp: '123456' });
+  await expect(page.getByLabel('Authenticator code')).toBeVisible();
+});
+
+test('customer account has sign-in, registration, recovery and social provider entry points', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/account');
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Continue with Google' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Continue with Facebook' })).toBeVisible();
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase4-account-social-390.png') });
+  await expect(page.getByLabel('Email address')).toBeVisible();
+  await page.getByRole('button', { name: 'Create account', exact: true }).first().click();
+  await expect(page.getByLabel('Full name')).toBeVisible();
+  await expect(page.getByText(/12 or more characters/)).toBeVisible();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Forgot password?' }).click();
+  await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Send reset link' })).toBeVisible();
+  await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase4-account-390.png') });
+});
+
+test('Facebook sign-in reports missing local Meta configuration without exposing credentials', async ({ page }) => {
+  await page.goto('/api/customer/facebook/start');
+  await expect(page).toHaveURL(/\/account\?error=facebook-not-configured$/);
+  await expect(page.locator('main [role="alert"]')).toContainText(/Meta app ID, secret, Graph API version and exact callback URL/);
+});
+
+test('first owner setup page is one-time and visibly includes mandatory authenticator enrollment', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**/api/admin/bootstrap/status', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ setupAvailable: true, suggestedEmail: 'owner@example.test' }),
+  }));
+  let beginCalls = 0;
+  await page.route('**/api/admin/bootstrap/begin', (route) => {
+    beginCalls += 1;
+    if (beginCalls === 1) return route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'Use a 15+ character password.' }),
+    });
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        setupToken: 'test-only-setup-token',
+        totpSecret: 'JBSWY3DPEHPK3PXP',
+        otpauthUri: 'otpauth://totp/Forma%20Furniture%3Aowner%40example.test?secret=JBSWY3DPEHPK3PXP&issuer=Forma%20Furniture&algorithm=SHA1&digits=6&period=30',
+        expiresInSeconds: 600,
+      }),
+    });
+  });
+  await page.route('**/api/admin/bootstrap/complete', (route) => route.fulfill({
+    status: 400,
+    contentType: 'application/json',
+    body: JSON.stringify({ error: 'Setup expired. Begin owner setup again.' }),
+  }));
+  await page.goto('/admin/setup');
+  await expect(page.getByRole('heading', { name: 'Create the first owner' })).toBeVisible();
+  await expect(page.getByText(/local development server/)).toBeVisible();
+  const ownerEmail = page.getByRole('textbox', { name: 'Owner email' });
+  if (!(await ownerEmail.isVisible())) {
+    await expect(page.getByText(/Initial setup is closed/)).toBeVisible();
+    return;
+  }
+  await page.screenshot({ path: resolve(process.cwd(), '..', 'docs', 'screenshots', 'phase4-admin-setup-390.png') });
+  const setupAttempt = await page.evaluate(async () => {
+    const response = await fetch('/api/admin/bootstrap/begin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'owner@example.test', password: 'invalid' }),
+    });
+    return { status: response.status, body: await response.json() };
+  });
+  expect(setupAttempt.status).toBe(400);
+  expect(setupAttempt.body.error).toMatch(/15\+ character password/);
+
+  await page.getByLabel('Create a strong password').fill('StrongPassword1234');
+  await page.getByRole('button', { name: 'Start secure setup' }).click();
+  await expect(page.getByRole('img', { name: 'Private Forma Furniture authenticator setup QR code' })).toBeVisible();
+  await expect(page.getByLabel('Current six-digit authenticator code')).toBeVisible();
+  await page.getByLabel('Current six-digit authenticator code').fill('123456');
+  await page.getByRole('button', { name: 'Verify and create owner' }).click();
+  await expect(page.locator('main [role="alert"]')).toContainText(/setup expired/i);
+  await expect(page.getByLabel('Create a strong password')).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Private Forma Furniture authenticator setup QR code' })).toHaveCount(0);
+});
+
+test('staff invitation lets the invited person set a password and scan a six-digit authenticator QR', async ({ page }) => {
+  const token = 'a'.repeat(43);
+  await page.route(`**/api/admin/invitations/${token}`, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ email: 'staff@example.test', role: 'SUPPORT', expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+  }));
+  await page.route(`**/api/admin/invitations/${token}/prepare`, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      setupToken: 'test-only-enrollment-token',
+      totpSecret: 'JBSWY3DPEHPK3PXP',
+      otpauthUri: 'otpauth://totp/Forma%20Furniture%3Astaff%40example.test?secret=JBSWY3DPEHPK3PXP&issuer=Forma%20Furniture&algorithm=SHA1&digits=6&period=30',
+      expiresInSeconds: 600,
+    }),
+  }));
+  await page.goto(`/admin/accept-invite?token=${token}`);
+  await expect(page.getByRole('heading', { name: 'Set up your staff account' })).toBeVisible();
+  await expect(page.getByText(/staff@example.test · SUPPORT/)).toBeVisible();
+  await page.getByLabel('Create a strong password').fill('StrongPassword1234');
+  await page.getByLabel('Confirm password').fill('StrongPassword1234');
+  await page.getByRole('button', { name: 'Continue to authenticator setup' }).click();
+  await expect(page.getByRole('img', { name: 'Private Forma Furniture staff authenticator QR code' })).toBeVisible();
+  await expect(page.getByText(/changing six-digit code/)).toBeVisible();
+  await expect(page.getByLabel('Current six-digit authenticator code')).toHaveAttribute('pattern', '[0-9]{6}');
 });

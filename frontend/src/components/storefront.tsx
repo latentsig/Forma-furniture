@@ -2,37 +2,64 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { type Category, type Product } from '@/catalog';
 import { parseCartStorage } from '@/cart';
 
-type CartLine = { productId: string; quantity: number };
-type CartContextValue = { lines: CartLine[]; count: number; add: (productId: string) => void; setQuantity: (productId: string, quantity: number) => void; clear: () => void; open: () => void };
+type CartLine = { productId: string; quantity: number; name: string; pricePaise: number; image: string; category: Category; material: string; isPublished: boolean; contentStatus: 'sample' | 'merchant_approved'; available: number };
+type CartContextValue = { lines: CartLine[]; count: number; error: string; add: (productId: string) => Promise<void>; setQuantity: (productId: string, quantity: number) => Promise<void>; clear: () => Promise<void>; open: () => void };
 const CartContext = createContext<CartContextValue | null>(null);
 const categories: Array<'All pieces' | Category> = ['All pieces', 'Seating', 'Tables', 'Bedroom', 'Storage'];
-const navLinks = [{ href: '/', label: 'Home' }, { href: '/collections', label: 'Collection' }, { href: '/spaces', label: 'Spaces' }, { href: '/craft', label: 'Craft' }, { href: '/journal', label: 'Journal' }, { href: '/visit', label: 'Visit' }];
+const navLinks = [{ href: '/', label: 'Home' }, { href: '/collections', label: 'Collection' }, { href: '/spaces', label: 'Spaces' }, { href: '/craft', label: 'Craft' }, { href: '/journal', label: 'Journal' }, { href: '/visit', label: 'Visit' }, { href: '/account', label: 'Account' }];
 
 export function CartProvider({ children, products }: { children: ReactNode; products: Product[] }) {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    setLines(parseCartStorage(localStorage.getItem('forma-demo-cart-v2'), localStorage.getItem('forma-demo-bag'), new Set(products.map((product) => product.id))));
-    setReady(true);
+  const [error, setError] = useState('');
+  const refresh = useCallback(async () => {
+    const response = await fetch('/api/commerce/cart', { cache: 'no-store' });
+    const payload = await response.json() as { cart?: { lines?: CartLine[] }; error?: string };
+    if (!response.ok || !payload.cart || !Array.isArray(payload.cart.lines)) throw new Error(payload.error ?? 'Your bag could not be loaded.');
+    setLines(payload.cart.lines);
+    return payload.cart.lines;
   }, []);
-  useEffect(() => { if (ready) localStorage.setItem('forma-demo-cart-v2', JSON.stringify(lines)); }, [lines, ready]);
-  const add = useCallback((productId: string) => {
+  useEffect(() => {
+    void (async () => {
+      try {
+        const current = await refresh();
+        if (current.length === 0) {
+          const legacy = parseCartStorage(localStorage.getItem('forma-demo-cart-v2'), localStorage.getItem('forma-demo-bag'), new Set(products.map((product) => product.id)));
+          for (const line of legacy) {
+            const response = await fetch('/api/commerce/cart/lines', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(line) });
+            if (!response.ok) break;
+          }
+          if (legacy.length) { localStorage.removeItem('forma-demo-cart-v2'); localStorage.removeItem('forma-demo-bag'); await refresh(); }
+        }
+        setError('');
+      } catch (cause) { setError(cause instanceof Error ? cause.message : 'Your bag could not be loaded.'); }
+    })();
+  }, [products, refresh]);
+  const add = useCallback(async (productId: string) => {
     if (!products.some((product) => product.id === productId)) return;
-    setLines((current) => {
-      const found = current.find((line) => line.productId === productId);
-      if (!found) return [...current, { productId, quantity: 1 }];
-      return current.map((line) => line.productId === productId ? { ...line, quantity: Math.min(99, line.quantity + 1) } : line);
-    });
-    setIsOpen(true);
-  }, [products]);
-  const setQuantity = useCallback((productId: string, quantity: number) => setLines((current) => quantity < 1 ? current.filter((line) => line.productId !== productId) : current.map((line) => line.productId === productId ? { ...line, quantity: Math.min(99, quantity) } : line)), []);
-  const value = useMemo(() => ({ lines, count: lines.reduce((sum, line) => sum + line.quantity, 0), add, setQuantity, clear: () => setLines([]), open: () => setIsOpen(true) }), [lines, add, setQuantity]);
-  return <CartContext.Provider value={value}>{children}{isOpen && <CartDrawer products={products} close={() => setIsOpen(false)} />}</CartContext.Provider>;
+    const response = await fetch('/api/commerce/cart/lines', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId }) });
+    const payload = await response.json() as { cart?: { lines?: CartLine[] }; error?: string };
+    if (!response.ok || !payload.cart) { setError(payload.error ?? 'This piece could not be added.'); return; }
+    setLines(payload.cart.lines ?? []); setError(''); setIsOpen(true);
+  }, [products, lines]);
+  const setQuantity = useCallback(async (productId: string, quantity: number) => {
+    const response = await fetch('/api/commerce/cart/lines', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId, quantity: Math.max(0, Math.min(99, quantity)) }) });
+    const payload = await response.json() as { cart?: { lines?: CartLine[] }; error?: string };
+    if (!response.ok || !payload.cart) { setError(payload.error ?? 'Your bag could not be updated.'); return; }
+    setLines(payload.cart.lines ?? []); setError('');
+  }, []);
+  const clear = useCallback(async () => {
+    const response = await fetch('/api/commerce/cart', { method: 'DELETE' });
+    const payload = await response.json() as { cart?: { lines?: CartLine[] }; error?: string };
+    if (!response.ok || !payload.cart) { setError(payload.error ?? 'Your bag could not be cleared.'); return; }
+    setLines(payload.cart.lines ?? []); setError('');
+  }, []);
+  const value = useMemo(() => ({ lines, count: lines.reduce((sum, line) => sum + line.quantity, 0), error, add, setQuantity, clear, open: () => setIsOpen(true) }), [lines, error, add, setQuantity, clear]);
+  return <CartContext.Provider value={value}>{children}{isOpen && <CartDrawer close={() => setIsOpen(false)} />}</CartContext.Provider>;
 }
 
 export function useCart() {
@@ -55,24 +82,49 @@ export function SiteHeader() {
       <button className="menu-button" type="button" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} onClick={() => setMenuOpen((openState) => !openState)}>{menuOpen ? '×' : '☰'}</button>
       <Link className="wordmark" href="/" aria-label="Forma home">forma.</Link>
       <nav className="header-nav" aria-label="Main navigation">{navLinks.slice(1).map((link) => <Link key={link.href} href={link.href} aria-current={path === link.href ? 'page' : undefined}>{link.label}</Link>)}</nav>
-      <button className="bag-button" type="button" onClick={open} aria-label={`Open demo bag, ${count} items`}>BAG&nbsp; ({count})</button>
+      <button className="bag-button" type="button" onClick={open} aria-label={`Open bag, ${count} items`}>BAG&nbsp; ({count})</button>
       {menuOpen && <nav className="mobile-menu" aria-label="Mobile navigation">{navLinks.slice(1).map((link) => <Link key={link.href} href={link.href} aria-current={path === link.href ? 'page' : undefined}>{link.label}</Link>)}</nav>}
     </header>
   </>;
 }
 
 export function SiteFooter() {
-  return <footer className="site-footer"><span>FORMA · FURNITURE FOR THE EVERYDAY</span><nav aria-label="Footer">{navLinks.slice(1).map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}</nav><span>Catalogue demo · no orders are recorded</span></footer>;
+  return <footer className="site-footer"><span>FORMA · FURNITURE FOR THE EVERYDAY</span><nav aria-label="Footer">{navLinks.slice(1).map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}</nav><span>Sample catalogue · products require merchant approval before sale</span></footer>;
 }
 
-function CartDrawer({ products, close }: { products: Product[]; close: () => void }) {
-  const { lines, setQuantity, clear } = useCart();
+function CartDrawer({ close }: { close: () => void }) {
+  const { lines, setQuantity, clear, error: cartError } = useCart();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const entries = lines.flatMap((line) => {
-    const product = products.find((item) => item.id === line.productId);
-    return product ? [{ product, quantity: line.quantity }] : [];
-  });
-  const total = entries.reduce((sum, entry) => sum + entry.product.price * entry.quantity, 0);
+  const [quote, setQuote] = useState<{ id: string; subtotalPaise: number; deliveryFeePaise: number; totalPaise: number; expiresAt: string } | null>(null);
+  const [checkoutError, setCheckoutError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [orderNumber, setOrderNumber] = useState('');
+  const [fulfillmentConsent, setFulfillmentConsent] = useState(false);
+  const idempotencyKey = useRef('');
+  const [address, setAddress] = useState({ fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', state: '', postcode: '' });
+  const subtotal = lines.reduce((sum, line) => sum + line.pricePaise * line.quantity, 0);
+  const requestQuote = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setBusy(true); setCheckoutError('');
+    try {
+      const response = await fetch('/api/commerce/quotes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ postcode: address.postcode }) });
+      const data = await response.json() as { quote?: typeof quote; error?: string };
+      if (!response.ok || !data.quote) throw new Error(data.error ?? 'Delivery quote could not be created.');
+      setQuote(data.quote); idempotencyKey.current = crypto.randomUUID();
+    } catch (cause) { setCheckoutError(cause instanceof Error ? cause.message : 'Delivery quote could not be created.'); }
+    finally { setBusy(false); }
+  };
+  const placeOrder = async () => {
+    if (!quote) return;
+    setBusy(true); setCheckoutError('');
+    try {
+      const response = await fetch('/api/commerce/orders', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey.current }, body: JSON.stringify({ quoteId: quote.id, address, fulfillmentConsent }) });
+      const data = await response.json() as { order?: { orderNumber?: string }; error?: string };
+      if (!response.ok || !data.order?.orderNumber) throw new Error(data.error ?? 'Order could not be placed.');
+      setOrderNumber(data.order.orderNumber); setQuote(null); await clear();
+    } catch (cause) { setCheckoutError(cause instanceof Error ? cause.message : 'Order could not be placed.'); }
+    finally { setBusy(false); }
+  };
+  const setAddressField = (field: keyof typeof address, value: string) => { setQuote(null); idempotencyKey.current = ''; setAddress((current) => ({ ...current, [field]: value })); };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { if (checkoutOpen) setCheckoutOpen(false); else close(); } };
     document.addEventListener('keydown', onKey);
@@ -80,15 +132,32 @@ function CartDrawer({ products, close }: { products: Product[]; close: () => voi
   }, [close, checkoutOpen]);
   return <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
     <section className="cart-panel" role="dialog" aria-modal="true" aria-labelledby="cart-title">
-      <div className="dialog-heading"><h2 id="cart-title">Your bag <small>· demo</small></h2><button className="icon-button" type="button" onClick={close} aria-label="Close bag">×</button></div>
-      <p className="notice">This is a storefront preview. Prices and availability are sample data; checkout does not place or record an order.</p>
-      {entries.length === 0 ? <p className="cart-empty">Your bag is taking a quiet moment.<br/>Find something lovely to bring home.</p> : <>
-        {entries.map(({ product, quantity }) => <article className="cart-line" key={product.id}><img src={asset(product.image)} alt=""/><div><h3>{product.name}</h3><span>{formatRupees(product.price)} each</span><div className="quantity-controls"><button type="button" aria-label={`Remove one ${product.name}`} onClick={() => setQuantity(product.id, quantity - 1)}>−</button><span>{quantity}</span><button type="button" aria-label={`Add one ${product.name}`} onClick={() => setQuantity(product.id, quantity + 1)}>+</button></div></div><div><span>{formatRupees(product.price * quantity)}</span><br/><button className="remove-button" type="button" onClick={() => setQuantity(product.id, 0)}>Remove</button></div></article>)}
-        <div className="cart-total"><span>Sample subtotal</span><strong>{formatRupees(total)}</strong></div>
-        <p className="notice">No payment, delivery quote or stock reservation is performed.</p>
-        <button className="button" type="button" onClick={() => setCheckoutOpen(true)}>View demo checkout</button>&nbsp; <button className="button secondary" type="button" onClick={clear}>Clear bag</button>
+      <div className="dialog-heading"><h2 id="cart-title">Your bag</h2><button className="icon-button" type="button" onClick={close} aria-label="Close bag">×</button></div>
+      <p className="notice">Final price, stock and delivery are checked by the store before an order is accepted.</p>
+      {cartError && <p className="notice" role="alert">{cartError}</p>}
+      {lines.length === 0 ? <p className="cart-empty">Your bag is taking a quiet moment.<br/>Find something lovely to bring home.</p> : <>
+        {lines.map((line) => <article className="cart-line" key={line.productId}><img src={asset(line.image)} alt=""/><div><h3>{line.name}</h3><span>{formatRupees(line.pricePaise / 100)} each</span><div className="quantity-controls"><button type="button" aria-label={`Remove one ${line.name}`} onClick={() => void setQuantity(line.productId, line.quantity - 1)}>−</button><span>{line.quantity}</span><button type="button" aria-label={`Add one ${line.name}`} onClick={() => void setQuantity(line.productId, line.quantity + 1)}>+</button></div></div><div><span>{formatRupees(line.pricePaise * line.quantity / 100)}</span><br/><button className="remove-button" type="button" onClick={() => void setQuantity(line.productId, 0)}>Remove</button></div></article>)}
+        <div className="cart-total"><span>Current subtotal</span><strong>{formatRupees(subtotal / 100)}</strong></div>
+        <button className="button" type="button" onClick={() => { setCheckoutOpen(true); setQuote(null); setCheckoutError(''); }}>Continue to checkout</button>&nbsp; <button className="button secondary" type="button" onClick={() => void clear()}>Clear bag</button>
       </>}
-      {checkoutOpen && <div className="dialog-backdrop" role="presentation"><section className="cart-panel" role="alertdialog" aria-modal="true" aria-labelledby="checkout-title"><div className="dialog-heading"><h2 id="checkout-title">Demo only</h2><button className="icon-button" type="button" onClick={() => setCheckoutOpen(false)} aria-label="Close demo checkout">×</button></div><p className="plain-copy">This preview cannot accept an order or payment. No purchase has been created.</p><button className="button" type="button" onClick={() => setCheckoutOpen(false)}>Return to bag</button></section></div>}
+      {checkoutOpen && <div className="dialog-backdrop" role="presentation"><section className="cart-panel" role="dialog" aria-modal="true" aria-labelledby="checkout-title"><div className="dialog-heading"><h2 id="checkout-title">Delivery &amp; payment</h2><button className="icon-button" type="button" onClick={() => setCheckoutOpen(false)} aria-label="Close checkout">×</button></div>
+        {orderNumber ? <><p className="notice" role="status">Your cash-on-delivery order {orderNumber} has been recorded. The collection amount remains due on delivery.</p><button className="button" type="button" onClick={() => { setCheckoutOpen(false); setOrderNumber(''); }}>Done</button></> : <>
+          <p className="notice">Cash on delivery is offered only where merchant delivery and stock rules are configured. No online payment is being taken.</p>
+          <form className="form-grid" onSubmit={quote ? (event) => { event.preventDefault(); void placeOrder(); } : requestQuote}>
+            <label>Full name<input required maxLength={160} autoComplete="name" value={address.fullName} onChange={(event) => setAddressField('fullName', event.target.value)}/></label>
+            <label>Phone<input required maxLength={32} autoComplete="tel" value={address.phone} onChange={(event) => setAddressField('phone', event.target.value)}/></label>
+            <label>Address line 1<input required maxLength={200} autoComplete="address-line1" value={address.addressLine1} onChange={(event) => setAddressField('addressLine1', event.target.value)}/></label>
+            <label>Address line 2 <span>(optional)</span><input maxLength={200} autoComplete="address-line2" value={address.addressLine2} onChange={(event) => setAddressField('addressLine2', event.target.value)}/></label>
+            <label>City<input required maxLength={100} autoComplete="address-level2" value={address.city} onChange={(event) => setAddressField('city', event.target.value)}/></label>
+            <label>State<input required maxLength={100} autoComplete="address-level1" value={address.state} onChange={(event) => setAddressField('state', event.target.value)}/></label>
+            <label>PIN code<input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="postal-code" value={address.postcode} onChange={(event) => setAddressField('postcode', event.target.value)}/></label>
+            <label><input type="checkbox" required={Boolean(quote)} checked={fulfillmentConsent} onChange={(event) => setFulfillmentConsent(event.target.checked)}/> I agree that these details may be used to fulfil this delivery.</label>
+            {quote && <div className="cart-total"><span>Items {formatRupees(quote.subtotalPaise / 100)} · Delivery {formatRupees(quote.deliveryFeePaise / 100)}</span><strong>Due {formatRupees(quote.totalPaise / 100)}</strong></div>}
+            {checkoutError && <p className="notice" role="alert">{checkoutError}{checkoutError.includes('Sign in') && <> <Link href="/account">Sign in to your account</Link>.</>}</p>}
+            <button className="button" type="submit" disabled={busy}>{busy ? 'Please wait…' : quote ? 'Place COD order' : 'Check delivery & total'}</button>
+          </form>
+        </>}
+      </section></div>}
     </section>
   </div>;
 }

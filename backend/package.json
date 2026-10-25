@@ -9,7 +9,11 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env.local --experimental-strip-types src/db/migrate.ts",
     "db:seed": "node --env-file-if-exists=.env.local --experimental-strip-types src/db/seed.ts",
-    "test:integration": "npm run db:migrate && npm run db:seed && node --env-file-if-exists=.env.local --experimental-strip-types --test src/integration.test.ts"
+    "admin:bootstrap-owner": "node --env-file-if-exists=.env.local --experimental-strip-types src/auth/bootstrap-owner.ts",
+    "test:payments": "node --experimental-strip-types src/payments/domain.test.ts",
+    "test:fulfillment": "node --experimental-strip-types src/fulfillment/domain.test.ts",
+    "test:ai-imagery": "node --experimental-strip-types src/ai-imagery/domain.test.ts",
+    "test:integration": "npm run db:migrate && npm run db:seed && node --env-file-if-exists=.env.local --experimental-strip-types --test src/integration.test.ts src/auth/security.test.ts src/auth/facebook-auth.test.ts src/commerce/service.test.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.4",

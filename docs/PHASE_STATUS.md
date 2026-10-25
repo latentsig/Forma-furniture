@@ -1,5 +1,7 @@
 # Forma Furniture — Phase Status
 
+Current forward sequence, dependencies and acceptance gates: [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
+
 ## Phase 0 — Repository audit, inventory and baseline
 
 **Status:** PASS — audit deliverables and available baseline checks completed. The repository itself remains a static demo, not production commerce.
@@ -242,3 +244,467 @@ to pass the local Phase 3 acceptance criteria.
 **Next phase allowed:** YES — Phase 3 acceptance criteria are complete. Phase 4
 (authentication, admin dashboard and RBAC) may begin when explicitly requested;
 do not skip phases or imply those capabilities exist yet.
+
+## Phase 4 — Authentication, role-based admin and catalog operations
+
+**Status:** BLOCKED for production acceptance — Phase 4 authentication,
+role-based access and staff/catalog workflows are implemented and pass local
+automated checks on a separate branch. Production acceptance remains blocked
+on operator provisioning and merchant decisions listed below.
+
+**Branch / base commit:** `phase-4-auth-admin-rbac`, branched from completed
+Phase 3 commit `f780168`. Changes are currently uncommitted on this branch.
+
+**Implemented in this increment:**
+
+- PostgreSQL admin-user, hashed-session and audit tables, with generated Drizzle
+  migrations `0001_living_forgotten_one.sql` through `0007_watery_christian_walker.sql`.
+- Owner bootstrap CLI requiring a strong password, a 32+ character base32 MFA
+  secret and a current TOTP code. Bootstrap refuses to create another account
+  after any administrator exists. No demo admin account or credentials were
+  created.
+- Admin passwords use Node scrypt; TOTP follows RFC 6238 and is required for
+  every sign-in. MFA secrets are AES-256-GCM encrypted at rest using the
+  untracked `ADMIN_MFA_ENCRYPTION_KEY`. Opaque random session tokens are stored
+  as SHA-256 digests, expire after eight hours and are revoked when an account
+  is disabled.
+- Exact OWNER, CATALOG_MANAGER, ORDER_MANAGER, SUPPORT and ANALYST role grants
+  are enforced server-side. Owners manage staff, audit, merchant approval and
+  publication. Catalog managers can edit/create/import but cannot approve or
+  publish. Other roles have read access only. Last active owner cannot be
+  removed; owner promotion requires explicit confirmation.
+- Protected Node API routes cover session sign-in/revocation, staff list/create/
+  role changes/disable, catalog read/create/edit/soft-unpublish, owner-only
+  approval/publication, CSV preview/commit, and audit reads. Product writes and
+  audit rows share PostgreSQL transactions. Sample records edited by staff are
+  moved to unpublished review drafts.
+- A TypeScript Next.js BFF stores the bearer session in an HttpOnly,
+  SameSite=Strict cookie, validates same-origin mutations and does not expose
+  tokens to browser JavaScript. `/admin` provides sign-in, product editing,
+  unpublished draft creation, owner approval/publication, CSV import preview,
+  and staff/audit controls.
+- `/admin/setup` now provides a one-time local first-owner flow. It is disabled
+  by default, is explicitly opt-in with `ADMIN_LOCAL_SETUP_ENABLED=true`, only
+  accepts loopback requests outside production, closes once any admin exists,
+  expires pending setup after ten minutes and requires TOTP before writing the
+  OWNER row. Production remains CLI-only. The owner enters their own email and
+  password in the local setup screen; no admin credential is stored in this
+  repository or sent through chat. The setup URI is rendered as a QR code
+  locally in the browser, with manual-key fallback for same-device setup. The
+  screen requires a six-digit time-based code and clears expired enrollment so
+  the owner can start over with a fresh key.
+- OWNER staff onboarding uses a one-time, 24-hour invitation rather than
+  asking the owner to collect another person's password or MFA seed. The owner
+  chooses the email and least-privilege role; the invitee privately creates a
+  password, scans their own locally generated QR, and verifies a six-digit
+  TOTP. Enrollment secrets are encrypted or hashed in PostgreSQL, enrollment
+  expires after ten minutes, failed TOTP attempts are limited, invitation
+  replay is rejected transactionally, and pending invitations can be cancelled.
+  Local development can show a private preview URL when explicitly enabled;
+  production delivery requires Resend and a verified sender.
+- PostgreSQL now has separate customer identity, session and one-use auth-token
+  tables in `backend/drizzle/0002_cheerful_dragon_man.sql`. `/account` supports
+  profile name/optional phone, password registration, mandatory email
+  verification, sign-in, sign-out, single-use password reset and Google sign-in
+  with server-side OIDC verification. Customer sessions and recovery tokens
+  are opaque; only SHA-256 digests are persisted. Reset revokes existing
+  sessions. Customers and admin staff have separate tables and auth routes.
+- Local email flows can return test-only verification/reset links when
+  `AUTH_LOCAL_DEV_LINKS=true` in ignored backend config. Production email uses
+  the configured Resend server API. Google OAuth uses a state, nonce and PKCE
+  browser flow; the API validates Google's signature, issuer, audience,
+  expiry, verified-email claim and nonce before creating a customer session.
+- Administrator password recovery is available from `/admin`: a single-use,
+  30-minute token is stored as a digest; generic responses avoid account
+  enumeration; successful reset updates the password transactionally, revokes
+  sessions, records an audit event and leaves TOTP mandatory. Local preview
+  links are test-only. Authenticator-loss recovery requires the same one-use
+  email token, then generates an encrypted replacement TOTP secret; the owner
+  must scan the QR and verify a current six-digit code before password/MFA
+  rotation commits. Existing sessions are revoked and the recovery is audited.
+  No MFA bypass is provided.
+- Admin and customer authentication throttles use atomic, short-lived
+  PostgreSQL buckets shared across API workers. Bucket identifiers are HMACed
+  with a key derived from the server-only MFA key; client IP values are not
+  stored. Production ingress must provide a stable client address or enforce
+  its own edge throttling; the API intentionally does not trust arbitrary
+  forwarded-IP headers.
+
+**Checks actually run:**
+
+- Backend `npm run typecheck`: passed.
+- Backend `npm run test:integration`: 19 passed, 0 failed, 0 skipped against
+  PostgreSQL, including RFC TOTP, password hashing, encrypted MFA, role grants,
+  session expiry/disabled-user revocation, admin API denial, sample-edit
+  unpublishing, owner approval/publication, staff invitation/password/TOTP
+  enrollment/replay rejection, CSV preview/transactional import, and admin
+  password recovery (one-use token, generic response, session revocation and
+  preserved MFA), authenticator-loss recovery (replacement TOTP, replay
+  rejection and revocation), and atomic shared PostgreSQL throttling without
+  plaintext IP storage. The run also includes two Facebook OAuth unit tests for
+  server-side code exchange, unreturned access tokens, callback mismatch and
+  missing credentials.
+- Frontend `npm run typecheck`: passed.
+- Frontend `npm test`: 4 passed, 0 failed, 0 skipped.
+- Frontend `npm run test:node`: 3 passed, 0 failed, 0 skipped; verifies all
+  original product/gallery image references resolve and the local image route
+  rejects traversal attempts.
+- Next.js production build verification: the updated application compiled and
+  TypeScript passed in a secret-free temporary copy under the bundled
+  dependency root using Webpack; all Facebook BFF routes were present in the
+  build. Building directly from the D: checkout remains blocked by the
+  environment's cross-drive junctions for `node_modules` (Turbopack cannot
+  locate Next, and Webpack resolves the C: package path as a relative module).
+- Playwright against an isolated refreshed Phase 4 production preview and live
+  API: 18
+  passed, 0 failed, 0 skipped. It covers Phase 3 responsive/storefront
+  behavior, customer account entry points, admin login/CSRF, owner setup and
+  expiration recovery, admin password and authenticator recovery, and the
+  staff invitation QR screen. Invitation
+  acceptance, expiry and replay behavior are covered by PostgreSQL integration
+  tests.
+- Latest focused Playwright customer-account/Facebook-fallback run: 2 passed,
+  0 failed, 0 skipped against that production build. The Facebook fallback
+  correctly explains that Meta configuration is not present.
+- `docs/screenshots/phase4-account-social-390.png` captures the mobile sign-in
+  form with both social provider buttons.
+- The local setup POST is protected by same-origin validation using incoming
+  host/forwarded-host values as well as the URL origin, covering the local
+  `127.0.0.1` browser URL when Next normalizes its request URL to `localhost`.
+  A Playwright regression assertion verifies that the request passes CSRF
+  validation and reaches backend input validation.
+- Playwright mocks the one-time setup route so both eligible and closed states
+  are safe to verify despite an already-provisioned local OWNER. QR generation
+  runs locally in the browser and contacts no third-party service. The live
+  local database has one configured OWNER, so `/admin/setup` is closed as
+  designed.
+- `git diff --check`: passed. The report and source changes are on the Phase 4
+  branch; no Phase 5 files or services were started.
+- `docs/screenshots/phase4-admin-login-390.png` captured at 390×844 CSS pixels.
+- `docs/screenshots/phase4-account-390.png` and
+  `docs/screenshots/phase4-admin-setup-390.png` captured at 390×844 CSS pixels.
+- `docs/screenshots/phase4-admin-password-reset-390.png` captured at 390×844
+  CSS pixels and visually reviewed.
+- `docs/screenshots/phase4-admin-access-recovery-390.png` captured at 390×844
+  CSS pixels; replacement authenticator QR and recovery form visually reviewed.
+- `docs/screenshots/phase4-collections-grid-fixed.png` captures the corrected
+  four-column collection grid. Manual DOM bounds at the review preview confirmed
+  the first card row ends at y=1183.25 and the next begins at y=1223.25, leaving
+  the configured 40px row gap with product names and controls inside their row.
+
+**Remaining Phase 4 issues / dependencies:**
+
+- No real merchant-approved SKU exists. The owner publication flow was verified
+  with a disposable database fixture, not a merchant product; product facts and
+  image rights still need approval.
+- Product variants/SKUs and inventory availability are not modeled yet.
+- Gallery paths can be reordered or removed in product editing, but binary
+  image upload/storage is not implemented; choose/configure an approved private
+  object-storage service first.
+- CSV supports dry-run and transactional draft import (50 rows, 64 KiB), but
+  merchant import ownership and field conventions still need approval.
+- Visit/conversion analytics are not collected. Consent, purpose, retention and
+  reporting access rules need merchant/privacy approval before instrumentation.
+- Admin audit retention currently has no approved expiry policy and is stated
+  explicitly in the console. Production ingress must provide stable client IP
+  forwarding or edge throttling; arbitrary forwarded-IP headers are not trusted.
+- The local untracked MFA encryption key must be copied to a managed secret
+  store and preserved; changing it requires an MFA-secret re-encryption plan.
+  A local OWNER account exists, so `/admin/setup` is intentionally closed.
+  Sign in at `/admin` with the owner password and six-digit authenticator code;
+  do not attempt to provision a second initial owner. Password reset and
+  verified-email authenticator replacement are implemented, but production
+  recovery delivery requires Resend and a verified sender.
+- Google OAuth client values are present only in ignored local server-side
+  environment files. The configured client now has the exact local JavaScript
+  origin and callback, and the local OAuth start reaches Google's Forma account
+  chooser without a redirect mismatch. The approved customer email is now
+  listed as a test user in the Google project. Full consent/callback is not
+  verified because the customer must complete Google account authentication and
+  consent in the browser. The client secret was shared in chat and must be
+  rotated before production use. Email verification and password reset still
+  need a Resend API key and verified sender in production; local preview links
+  are test-only.
+- Facebook Login for Web is now wired through a state-protected Next.js BFF
+  callback and server-only Graph API code exchange. Facebook app secrets never
+  enter the browser. Migration `0008_cynical_trish_tilby.sql` adds a unique
+  Facebook subject. Existing accounts are not silently linked; new Facebook
+  identities remain email-unverified and can request a verification email.
+  Live Facebook sign-in remains unverified because Meta app credentials and
+  the exact callback are not configured in this environment. Configure
+  `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`, a Meta-supported
+  `FACEBOOK_GRAPH_VERSION`, and the identical exact `FACEBOOK_REDIRECT_URI` in
+  the frontend/backend server environments, then register it in Meta Login.
+- Production staff invitations cannot be emailed until Resend credentials and
+  a verified sender are configured. This local environment has no mail sender;
+  local invitation preview links are enabled for development only and must be
+  shared through a private channel.
+- Native Android/iOS login is not implemented in this phase; Phase 10 will add
+  Expo screens using the same customer backend identity and profile records.
+
+**Security / compatibility:** no password, TOTP seed, session token or database
+credential is committed or exposed to the frontend bundle. The local dev key
+exists only in ignored `backend/.env.local`. The initial OWNER setup is
+loopback-only and disabled in production. Customer signup cannot grant staff
+access. Guest storefront browsing and the Phase 3 product API remain available.
+Orders, payments and shipping are not in this phase.
+
+**Phase 4 decision:** **NO-GO for production checkout.** Its operator
+configuration and merchant catalog/storage/privacy decisions remain unresolved.
+Per the user's later explicit instruction, Phase 5 local development work is
+proceeding behind closed production configuration gates; this does not mark
+Phase 4 as passed or authorize production commerce.
+
+## Phase 5 — persistent cart, delivery quote, checkout and COD
+
+**Status:** IN PROGRESS locally; BLOCKED for merchant/production checkout.
+
+**Branch / base:** `phase-4-auth-admin-rbac`; existing Phase 4 changes remain
+uncommitted alongside this development increment. Phase 4 production status is
+still BLOCKED and was not changed to PASS.
+
+**Implemented so far:**
+
+- PostgreSQL guest/customer carts and cart lines, opaque guest-cart tokens held
+  in an HttpOnly, SameSite=Strict BFF cookie, server-side cart ownership, and
+  guest-to-customer merge on authenticated cart access. Legacy local cart data
+  is migrated to the server on first load.
+- Server-derived cart prices, integer-paise delivery quotes bound to a verified
+  customer, cart and PIN, ten-minute quote expiry, published and
+  merchant-approved product checks, and inventory availability checks.
+- Transactional COD order creation with address snapshot, explicit fulfillment
+  consent/version, item/SKU/price snapshots, stock reservation, unique hashed
+  idempotency keys, one-use quotes, and an `amount_due` COD payment state.
+  Browser totals do not determine order values; COD is disabled by default.
+- Reservation expiry sweep and cancellation release stock. Owner/order-manager
+  can list and cancel unpaid COD orders; support can view orders. Customer
+  account page can view only that customer's order history.
+- Storefront cart now uses the backend, supports checkout address entry, quote
+  and COD confirmation. Checkout remains closed unless the server is configured
+  with merchant-approved delivery PINs/fees/COD policy and sellable inventory.
+- PostgreSQL migrations `0009_persistent_cart_cod.sql` and
+  `0010_fulfillment_consent.sql` were applied to the local development database.
+  Existing sample products receive zero stock and cannot be ordered.
+
+**Outstanding prerequisites and risks:**
+
+- Phase 4 production dependencies remain open: verified email delivery, exact
+  Google OAuth callback/credentials, managed encryption key and trusted ingress.
+- Merchant has not approved a sellable SKU, its facts/price/image rights, stock,
+  serviceable PINs, delivery/assembly fee or ETA, COD eligibility/fee, address
+  retention, order-change/cancellation rules, privacy wording or receipt text.
+  Until configured, the feature is a local implementation preview and no real
+  COD order should be taken.
+- Initial stock uses product ID as a temporary SKU key. A merchant-approved SKU
+  and variants model plus authorized stock adjustment UI are still needed.
+- Customer order history and basic order-manager operations are implemented;
+  notification, invoice, fulfillment and returns remain in their later phases.
+- Checks actually run for this local increment:
+  - Backend and frontend TypeScript typechecks passed.
+  - PostgreSQL migrations `0009_persistent_cart_cod.sql` and
+    `0010_fulfillment_consent.sql` applied successfully; a Drizzle generation
+    check reported no schema changes afterward.
+  - Phase 5 commerce service tests against PostgreSQL: 4 passed, 0 failed,
+    0 skipped. They cover verified customer access, guest cart merge, server
+    price snapshots, COD idempotency, consent, stock reservation, concurrent
+    one-unit checkouts without overselling, cancellation, and expired
+    reservation release/voiding.
+  - Backend PostgreSQL integration tests: 14 passed, 0 failed, 0 skipped.
+  - Frontend Vitest: 4 passed, 0 failed, 0 skipped. Frontend Node checks: 3
+    passed, 0 failed, 0 skipped.
+  - Playwright against the isolated production-mode frontend preview and API
+    previously passed 19 tests (0 failed, 0 skipped), covering responsive
+    layouts, persisted guest cart behavior, checkout sign-in gating, and
+    customer/admin journeys. A rerun in the current sandbox was blocked because
+    Playwright could not spawn its worker (`EPERM`). It does not place a real
+    merchant order.
+  - Next.js production-mode Webpack build completed in an isolated temporary
+    copy; `git diff --check` passed. The D: checkout itself still cannot build
+    directly in this environment because its dependency junction crosses
+    drives.
+  - Backend API health, storefront HTTP response, and secure guest-cart cookie
+    were manually checked on the isolated review preview. Preview:
+    `http://127.0.0.1:3107/`.
+- A Phase 5-specific screenshot has not been saved. No live COD checkout was
+  attempted because merchant configuration is intentionally absent.
+- Frontend Vitest and Playwright reruns currently hit Windows sandbox
+  `spawn EPERM`; prior successful runs are recorded above. The Node catalogue
+  suite passed 3 tests in the current run.
+- Acceptance is not established: merchant product/policy approval and a
+  retained, operator-authorized COD order are absent. The automated fixture
+  order is cleaned up after its assertions. Production gates remain open.
+- Read-only local readiness check (2026-10-25): COD is disabled, zero valid
+  delivery PINs are configured, and PostgreSQL contains zero published
+  merchant-approved products with sellable stock. No production order was
+  created or represented as accepted.
+- Production acceptance handover prepared: see
+  [`PHASE5_MERCHANT_APPROVAL.md`](PHASE5_MERCHANT_APPROVAL.md) and
+  [`PHASE5_PRODUCTION_CHECKLIST.md`](PHASE5_PRODUCTION_CHECKLIST.md). These
+  records separate engineering evidence from merchant approvals and production
+  verification; all merchant, developer-release and DevOps sign-offs remain
+  pending.
+
+**Next phase allowed:** NO for full Phase 6 integration or production use. At
+the user's later explicit request, provider-neutral Phase 6 domain groundwork
+has begun in isolation; it does not mark Phase 5 PASS or authorize Phase 6
+gateway checkout. Core transaction, race/idempotency, access-control and local
+customer/staff journey checks have passing evidence. Phase 5 still cannot
+receive PASS until the merchant approves product/SKU facts and commerce policies
+and authorizes a retained COD acceptance order. Phase 4 production acceptance
+remains separately blocked.
+
+## Phase 6 — online payment and RuPay
+
+**Status:** BLOCKED for gateway integration and production; provider-neutral
+domain groundwork only.
+
+**Start condition:** The user explicitly requested Phase 6 to begin after the
+Phase 5 handover. Phase 5 remains BLOCKED, so no hosted checkout, order payment,
+gateway API, webhook route, production setting, or live-money behavior has been
+enabled. Work in this section is an isolated TypeScript contract/state-machine
+foundation; the dependency and approval gates in `IMPLEMENTATION_PLAN.md` remain
+in force for integration and acceptance.
+
+**Implemented:**
+
+- Added server-side TypeScript gateway adapter contracts for provider selection,
+  hosted checkout creation, signature-verified event normalization, and status
+  fetch. There is no concrete Razorpay/Cashfree adapter and no provider is
+  selected.
+- Added a provider-neutral payment state transition decision function. It
+  prevents stale callbacks from downgrading a captured payment and routes
+  contradictory terminal states to reconciliation instead of guessing.
+- Added server-calculated amount/currency equality validation. Browser redirects
+  are not a payment authority.
+- No payment credential, account, webhook, production config, payment schema,
+  route or storefront control was added or changed.
+
+**Checks actually run:**
+
+- `node --experimental-strip-types src/payments/domain.test.ts`: 3 passed,
+  0 failed, 0 skipped. Covers monotonic/idempotent transitions, contradictory
+  event reconciliation, and amount/currency mismatch rejection.
+- Backend `npm run typecheck`: passed.
+
+**Blockers and owners:**
+
+- Phase 5 acceptance, merchant-approved SKU/policies, and authorized COD
+  acceptance evidence — Merchant and merchant operations; see
+  `PHASE5_MERCHANT_APPROVAL.md` and `PHASE5_PRODUCTION_CHECKLIST.md`.
+- Gateway selection and onboarding — Merchant/finance must choose Razorpay or
+  Cashfree using an actual merchant account and verify sandbox methods,
+  including RuPay availability if required.
+- Concrete gateway adapter, persistent attempts/events, transactional online
+  order creation, verified webhook processing, refund/reconciliation paths and
+  end-to-end tests — Developer, after the entry gates are met.
+- Sandbox/production secrets, webhook endpoint registration, TLS, monitoring,
+  deployment and rollback — DevOps/release owner after merchant approval.
+
+**Next phase allowed:** NO for provider-specific checkout. At the user's later
+request, Phase 7 has a small policy-gated domain foundation only; it does not
+enable fulfillment. Complete Phase 5 acceptance and obtain the selected
+gateway's merchant sandbox onboarding before implementing or enabling
+provider-specific checkout. Production payment remains disabled.
+
+## Phase 7 — fulfillment and after-sales
+
+**Status:** BLOCKED for operational workflow and production; policy-gated
+domain groundwork only.
+
+**Start condition:** The user explicitly requested Phase 7 to begin. Phase 6 is
+not passed and merchant operations policies are not approved. The work here is
+an isolated TypeScript guard that accepts no transition unless a versioned
+merchant policy record explicitly allows that state pair and actor role. No
+default order lifecycle or legal policy was invented.
+
+**Implemented:**
+
+- Added `backend/src/fulfillment/domain.ts` to validate candidate order-state
+  transitions against a supplied policy ID/version, approval record reference,
+  approver, approval date, and explicit per-role transition rules.
+- Missing/unapproved policy, malformed states, duplicate state changes,
+  unlisted transitions and unauthorized roles are denied.
+- The guard is not connected to order APIs or PostgreSQL. No order status,
+  COD/payment state, customer notification, shipment, return, refund, audit
+  record, or production configuration was changed.
+
+**Checks actually run:**
+
+- `npm run test:fulfillment`: 3 passed, 0 failed, 0 skipped. The approved policy
+  used by tests is a fixture only and is not merchant approval.
+- Backend `npm run typecheck`: passed.
+
+**Blockers and owners:**
+
+- Phase 5 production acceptance and Phase 6 payment gate — Merchant and
+  merchant operations; see their status sections above.
+- Order/payment/shipment state machine, cancellation windows, returns,
+  exchanges, restocking, warranty and refund policy — Merchant business,
+  logistics and finance owners must approve written rules; Developer then
+  implements and verifies legal transitions.
+- Notification channels, verified sender, retry policy, retention and incident
+  ownership — Merchant support owner and DevOps approve operations; Developer
+  implements delivery/outbox behavior after those decisions.
+- Production database, event audit, object/receipt storage, monitoring,
+  backups and rollback — DevOps/release owner.
+
+**Next phase allowed:** NO for operational Phase 7 or later-phase integration.
+At the user's later explicit request, Phase 8 has deterministic validation and
+review-state groundwork only; it does not enable AI image generation. Do not
+expose the Phase 7 guard as an order-management operation until Phase 5 and
+Phase 6 gates and the merchant-approved Phase 7 policy are complete.
+Production fulfillment remains disabled.
+
+## Phase 8 — admin-controlled AI imagery
+
+**Status:** BLOCKED for model integration, persistence, review UI and
+production; deterministic domain groundwork only.
+
+**Start condition:** The user explicitly requested Phase 8 to begin. Phase 6 is
+not passed, no real SKU/canonical image rights approval is recorded, and no
+image-model credential, model/cost allowlist, or private object-storage
+configuration is present. This increment adds fail-closed validation/review
+logic only; it makes no image API request and does not alter original images.
+
+**Implemented:**
+
+- Added `backend/src/ai-imagery/domain.ts` for deterministic checks of product
+  approval, canonical source asset/hash, image-rights approval, prompt version
+  and length, configured model allowlist, per-job cost ceiling and remaining
+  quota.
+- Added a generated-concept review state machine. Worker output can only enter
+  human review; only OWNER may approve or publish a preview; generated concepts
+  explicitly cannot replace the canonical product image.
+- Added `npm run test:ai-imagery` for the domain tests.
+- No OpenAI SDK/API call, key, async queue, PostgreSQL migration, storage,
+  admin route/UI, generated image, product publication, or production setting
+  was added or changed. The model name/cost remain unselected until verified
+  against available account access and current provider information.
+
+**Checks actually run:**
+
+- `npm run test:ai-imagery`: 4 passed, 0 failed, 0 skipped. These use fixture
+  inputs; they do not represent merchant/product approval or model execution.
+- Backend `npm run typecheck`: passed.
+
+**Blockers and owners:**
+
+- Stable real SKU, canonical source image and usage rights — Merchant supplies
+  and approves; Developer maps to the catalogue and preserves the source.
+- Phase 4 identity/admin production gate and Phase 6 gateway/sequence gate —
+  Merchant/owner, Developer and DevOps; see earlier phase sections. No later
+  feature acceptance is implied by this isolated groundwork.
+- OpenAI API model/account access and approved spend limits — Merchant/owner
+  authorizes use and budget; Developer verifies a currently supported model and
+  implements server-only calls, limits, retries and provenance; DevOps supplies
+  managed server-side credentials, monitoring and secret custody.
+- Private object storage, retention/deletion/access policy — Merchant/privacy
+  owner approves; DevOps provisions; Developer implements private storage and
+  access controls.
+- Admin compare/reject/retry/approve/publish-preview UI and persistent async
+  job/audit state — Developer after prerequisites; OWNER remains the required
+  human approver.
+
+**Next phase allowed:** NO. Phase 8 remains blocked until Phase 6 and other
+entry criteria are met and a real source asset's SKU/rights and budget are
+approved. No generation or publication has occurred.
