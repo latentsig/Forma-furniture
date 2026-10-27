@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: forma_furniture_staging
+      POSTGRES_USER: forma_staging
+      POSTGRES_PASSWORD: ${STAGING_DB_PASSWORD:?Set STAGING_DB_PASSWORD in deployment/staging.env}
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - forma_staging_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forma_staging -d forma_furniture_staging"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  staging-init:
+    profiles: ["init"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      NODE_ENV: production
+      APP_ENV: staging
+      DATABASE_URL: postgres://forma_staging:${STAGING_DB_PASSWORD}@postgres:5432/forma_furniture_staging
+    command: ["sh", "-c", "npm run db:migrate && npm run db:seed"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      NODE_ENV: production
+      APP_ENV: staging
+      DATABASE_URL: postgres://forma_staging:${STAGING_DB_PASSWORD}@postgres:5432/forma_furniture_staging
+      PORT: "4100"
+      HOST: "0.0.0.0"
+      FRONTEND_ORIGIN: ${NEXT_PUBLIC_SITE_URL:?Set NEXT_PUBLIC_SITE_URL in deployment/staging.env}
+      CUSTOMER_APP_ORIGIN: ${NEXT_PUBLIC_SITE_URL:?Set NEXT_PUBLIC_SITE_URL in deployment/staging.env}
+      ADMIN_MFA_ENCRYPTION_KEY: ${ADMIN_MFA_ENCRYPTION_KEY:?Generate a local staging-only 32-byte hex key}
+      COD_ENABLED: "false"
+      DELIVERY_SERVICEABLE_PIN_CODES: ""
+    ports:
+      - "127.0.0.1:14100:4100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?Set NEXT_PUBLIC_SITE_URL in deployment/staging.env}
+        FORMA_API_URL: http://backend:4100
+    environment:
+      NODE_ENV: production
+      APP_ENV: staging
+      FORMA_API_URL: http://backend:4100
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?Set NEXT_PUBLIC_SITE_URL in deployment/staging.env}
+    ports:
+      - "127.0.0.1:13100:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+
+volumes:
+  forma_staging_pgdata:

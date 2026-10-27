@@ -1,9 +1,9 @@
 import { randomBytes, createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { getFormaApiOrigin } from '@/server/api-origin';
 
 export const dynamic = 'force-dynamic';
 const cookieBase = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, path: '/api/customer/google', maxAge: 600 };
-const apiOrigin = process.env.FORMA_API_URL ?? 'http://127.0.0.1:4100';
 
 export async function GET(request: NextRequest) {
   const origin = request.nextUrl.origin;
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   const challenge = createHash('sha256').update(verifier).digest('base64url');
   const callback = new URL('/api/customer/google/callback', origin).toString();
   try {
-    const registered = await fetch(new URL('/api/customers/google/nonce', apiOrigin), { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nonce }) });
+    const registered = await fetch(new URL('/api/customers/google/nonce', getFormaApiOrigin()), { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nonce }) });
     if (!registered.ok) return NextResponse.redirect(new URL('/account?error=google-sign-in-unavailable', origin));
   } catch { return NextResponse.redirect(new URL('/account?error=google-sign-in-unavailable', origin)); }
   const authorization = new URL('https://accounts.google.com/o/oauth2/v2/auth');

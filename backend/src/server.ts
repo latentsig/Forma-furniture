@@ -21,8 +21,8 @@ import { completeAdminAccessRecovery, issueAdminPasswordReset, prepareAdminAcces
 import { consumeRateLimit } from './auth/rate-limit.ts';
 import { addCartLine, cancelCodOrder, CommerceError, createDeliveryQuote, expireCodReservations, listCustomerOrders, listStaffOrders, placeCodOrder, readCart, resolveCart, setCartLine, clearCart } from './commerce/service.ts';
 import { commerceOrderLines, commerceOrders } from './db/schema.ts';
+import { getBackendRuntimeConfig } from './runtime-config.ts';
 
-const port = Number(process.env.PORT ?? 4100);
 const allowedOrigin = process.env.FRONTEND_ORIGIN ?? 'http://localhost:3000';
 const sorts: ProductSort[] = ['featured', 'price-asc', 'price-desc', 'name'];
 const pendingLocalOwners = new Map<string, { email: string; passwordSalt: string; passwordHash: string; totpSecret: string; expiresAt: number; attempts: number }>();
@@ -831,10 +831,11 @@ export function createCommerceServer(): Server {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const server = createCommerceServer();
+  const { port: listenPort, host } = getBackendRuntimeConfig();
   const reservationSweep = setInterval(() => { void expireCodReservations().catch(() => process.stderr.write('COD reservation expiry sweep failed.\n')); }, 60_000);
   reservationSweep.unref();
-  server.listen(port, '127.0.0.1', () => {
-    process.stdout.write(`Forma TypeScript commerce API listening on 127.0.0.1:${port}\n`);
+  server.listen(listenPort, host, () => {
+    process.stdout.write(`Forma TypeScript commerce API listening on ${host}:${listenPort}\n`);
   });
 
   function shutdown(signal: string) {

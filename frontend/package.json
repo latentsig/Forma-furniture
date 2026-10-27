@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "prestart": "node --experimental-strip-types src/server/validate-env.ts && node --experimental-strip-types src/server/prepare-standalone.ts",
+    "start": "node .next/standalone/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:node": "node --experimental-strip-types src/catalog.node.test.ts",

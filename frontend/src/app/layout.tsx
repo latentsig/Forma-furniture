@@ -3,11 +3,12 @@ import type { ReactNode } from 'react';
 import { CartProvider, SiteFooter, SiteHeader } from '@/components/storefront';
 import { getCatalog } from '@/catalog-api';
 import type { Product } from '@/catalog';
+import { getFormaSiteOrigin } from '@/server/site-origin';
 
 export const metadata: Metadata = {
   title: { default: 'Forma — Furniture for the everyday', template: '%s — Forma' },
   description: 'Considered furniture for the ordinary moments that make a life.',
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000')
+  metadataBase: new URL(getFormaSiteOrigin())
 };
 
 export const dynamic = 'force-dynamic';

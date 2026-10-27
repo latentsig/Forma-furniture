@@ -12,6 +12,7 @@ type CustomerRecord = typeof customers.$inferSelect;
 
 export function validateCustomerPassword(value: string) {
   return value.length >= 12 && value.length <= 256 && /[a-z]/.test(value) && /[A-Z]/.test(value) && /\d/.test(value);
+}
 
 export function safeCustomer(user: CustomerRecord): CustomerPublic {
   return { id: user.id, email: user.email, fullName: user.fullName, phone: user.phone, emailVerified: Boolean(user.emailVerifiedAt) };

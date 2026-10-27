@@ -1,8 +1,8 @@
 import { timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { getFormaApiOrigin } from '@/server/api-origin';
 
 export const dynamic = 'force-dynamic';
-const apiOrigin = process.env.FORMA_API_URL ?? 'http://127.0.0.1:4100';
 const cookieName = 'forma_customer_session';
 const oauthCookieNames = ['forma_google_state', 'forma_google_nonce', 'forma_google_verifier'];
 const clearCookie = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, path: '/api/customer/google', maxAge: 0 };
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     });
     const tokenData: unknown = await tokenResponse.json();
     if (!tokenResponse.ok || !tokenData || typeof tokenData !== 'object' || !('id_token' in tokenData) || typeof tokenData.id_token !== 'string') throw new Error('Google token exchange failed.');
-    const accountResponse = await fetch(new URL('/api/customers/google', apiOrigin), {
+    const accountResponse = await fetch(new URL('/api/customers/google', getFormaApiOrigin()), {
       method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: tokenData.id_token, nonce }),
     });
     const accountData: unknown = await accountResponse.json();

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isSameOriginRequest } from '../../same-origin';
+import { getFormaApiOrigin } from '@/server/api-origin';
 
 const cookieName = 'forma_customer_session';
-const apiOrigin = process.env.FORMA_API_URL ?? 'http://127.0.0.1:4100';
 type RouteContext = { params: Promise<{ path: string[] }> };
 const allowedPaths = new Set(['register', 'verify-email', 'request-email-verification', 'login', 'forgot-password', 'reset-password', 'google', 'facebook', 'session', 'profile']);
 
@@ -20,7 +20,7 @@ async function proxy(request: NextRequest, context: RouteContext, method: 'GET' 
     catch { return NextResponse.json({ error: 'Request body must be valid JSON.' }, { status: 400 }); }
   }
   try {
-    const upstream = await fetch(new URL(`/api/customers/${action}`, apiOrigin), {
+    const upstream = await fetch(new URL(`/api/customers/${action}`, getFormaApiOrigin()), {
       method, cache: 'no-store',
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(method === 'POST' || method === 'PATCH' ? { 'Content-Type': 'application/json' } : {}) },
       ...(method === 'POST' || method === 'PATCH' ? { body: JSON.stringify(payload) } : {}),
